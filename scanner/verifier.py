@@ -135,8 +135,9 @@ def run_verifier(patch_result: dict, confirmed: list[dict], repo_path: str) -> d
         rule_ids = {p.get("check_id", "") for p in patches if p.get("check_id")}
 
         # Re-run Semgrep
+        from scanner.semgrep import _semgrep_bin
         result = subprocess.run(
-            ["semgrep", "--config", "p/owasp-top-ten", "--json", "--quiet", tmp_dir],
+            [_semgrep_bin(), "--config", "p/owasp-top-ten", "--json", "--quiet", tmp_dir],
             capture_output=True, text=True, timeout=120,
         )
 
@@ -287,7 +288,8 @@ def _parse_test_output(output: str, runner: list[str]) -> tuple[int, int, int]:
 
 def _semgrep_available() -> bool:
     try:
-        result = subprocess.run(["semgrep", "--version"], capture_output=True, timeout=5)
+        from scanner.semgrep import _semgrep_bin
+        result = subprocess.run([_semgrep_bin(), "--version"], capture_output=True, timeout=5)
         return result.returncode == 0
     except Exception:
         return False

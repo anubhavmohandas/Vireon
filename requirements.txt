@@ -1,26 +1,22 @@
-# Vireon dependencies
+# Vireon dependencies — fully standalone, no SAGE needed
 #
-# IMPORTANT: Install SAGE dependencies first:
-#   cd ../SAGE && pip install -r requirements.txt
-#
-# Then install Vireon-specific deps:
+# Install:
 #   pip install -r requirements.txt
 
+# ── LLM (OpenAI-compatible client — works with Featherless, AIML, Anthropic) ──
+openai>=1.30.0
+
 # ── Band SDK ──────────────────────────────────────────────────────────────────
-# Install: pip install "band-sdk[anthropic]"
-# This installs the thenvoi package with Anthropic adapter support
 band-sdk[anthropic]
 
-# ── Async HTTP (for FastAPI backend by Harsh) ─────────────────────────────────
+# ── FastAPI backend ───────────────────────────────────────────────────────────
 fastapi==0.115.0
 uvicorn==0.30.6
 httpx==0.27.0
 
-# ── All below are already in SAGE/requirements.txt ───────────────────────────
-# Listed here so Vireon can be installed standalone if needed.
-# If SAGE venv is active, these are already satisfied — no conflict.
-anthropic>=0.40.0
+# ── Core dependencies ─────────────────────────────────────────────────────────
 python-dotenv>=1.0.0
 requests>=2.31.0
 networkx>=3.0
 rich>=13.5.2
+packaging>=23.0

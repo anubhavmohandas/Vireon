@@ -14,37 +14,88 @@ Copy the UUID and API key from each agent's settings page.
 """
 
 import os
-import anthropic
 from dataclasses import dataclass, field
 from dotenv import load_dotenv
 
 load_dotenv()
 
 
-def make_llm_client() -> anthropic.Anthropic:
-    """
-    Returns an Anthropic client pointed at AI/ML API if AIML_API_KEY is set,
-    otherwise falls back to direct Anthropic (for local dev with own key).
+# ── Default model per provider ────────────────────────────────────────────────
+_FEATHERLESS_MODEL = "meta-llama/Llama-3.3-70B-Instruct"
+_AIML_MODEL        = "claude-sonnet-4-5"
+_ANTHROPIC_MODEL   = "claude-sonnet-4-5"
 
-    AI/ML API is OpenAI-compatible but also exposes an Anthropic-compatible
-    endpoint at https://api.aimlapi.com — we use the anthropic SDK with a
-    custom base_url.
-    """
-    aiml_key = os.getenv("AIML_API_KEY", "")
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
 
-    if aiml_key:
-        return anthropic.Anthropic(
+def make_llm_client():
+    """
+    Returns an OpenAI-compatible client.
+
+    Provider priority:
+      1. FEATHERLESS_API_KEY → api.featherless.ai (open-weight models, no cost)
+      2. AIML_API_KEY        → api.aimlapi.com    (hackathon credits)
+      3. ANTHROPIC_API_KEY   → direct Anthropic via openai-compat shim
+
+    All providers speak OpenAI /v1/chat/completions — use llm_call() not the
+    client directly so model selection is handled automatically.
+    """
+    from openai import OpenAI
+
+    featherless_key = os.getenv("FEATHERLESS_API_KEY", "")
+    aiml_key        = os.getenv("AIML_API_KEY", "")
+    anthropic_key   = os.getenv("ANTHROPIC_API_KEY", "")
+
+    if featherless_key:
+        return OpenAI(
+            api_key=featherless_key,
+            base_url="https://api.featherless.ai/v1",
+        )
+    elif aiml_key:
+        return OpenAI(
             api_key=aiml_key,
             base_url="https://api.aimlapi.com/v1",
         )
     elif anthropic_key:
-        return anthropic.Anthropic(api_key=anthropic_key)
+        # Anthropic's OpenAI-compatible endpoint
+        return OpenAI(
+            api_key=anthropic_key,
+            base_url="https://api.anthropic.com/v1",
+        )
     else:
         raise EnvironmentError(
             "\n[Vireon] No LLM API key found.\n"
-            "Set AIML_API_KEY (hackathon credits) or ANTHROPIC_API_KEY in .env\n"
+            "Set FEATHERLESS_API_KEY, AIML_API_KEY, or ANTHROPIC_API_KEY in .env\n"
         )
+
+
+def default_model() -> str:
+    """Return the right model string for whichever provider is active."""
+    if os.getenv("FEATHERLESS_API_KEY"):
+        return _FEATHERLESS_MODEL
+    elif os.getenv("AIML_API_KEY"):
+        return _AIML_MODEL
+    else:
+        return _ANTHROPIC_MODEL
+
+
+def llm_call(prompt: str, system: str = "", max_tokens: int = 2048) -> str:
+    """
+    Single-turn LLM call. Returns the response text.
+    Handles provider differences internally — callers get plain text back.
+    """
+    client = make_llm_client()
+    model  = default_model()
+
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+
+    response = client.chat.completions.create(
+        model=model,
+        max_tokens=max_tokens,
+        messages=messages,
+    )
+    return response.choices[0].message.content.strip()
 
 
 @dataclass
@@ -94,17 +145,11 @@ def load_config() -> VireonConfig:
     anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
 
     if not aiml_key and not anthropic_key:
-        raise EnvironmentError(
-            "\n[Vireon] No LLM key found.\n"
-            "Set AIML_API_KEY (hackathon credits from aimlapi.com)\n"
-            "or ANTHROPIC_API_KEY (direct Anthropic) in .env\n"
-        )
+        print("[Vireon] WARNING: No LLM key found — LLM-dependent agents will be skipped.")
+        print("  Set AIML_API_KEY or ANTHROPIC_API_KEY in .env to enable full pipeline.")
 
-    # Set ANTHROPIC_API_KEY in env so SAGE's own config.py picks it up
-    # SAGE calls os.getenv("ANTHROPIC_API_KEY") directly
     if aiml_key and not anthropic_key:
         os.environ["ANTHROPIC_API_KEY"] = aiml_key
-        # Also set the base URL so SAGE's anthropic client hits AI/ML API
         os.environ.setdefault("ANTHROPIC_BASE_URL", "https://api.aimlapi.com/v1")
 
     return VireonConfig(

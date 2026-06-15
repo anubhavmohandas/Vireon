@@ -18,7 +18,7 @@ import os
 
 from agents.base_agent import BandAgent
 from memory.shared_state import SharedState, AgentResult
-from config import make_llm_client
+from config import llm_call
 
 
 _CHALLENGER_PROMPT = """
@@ -106,14 +106,7 @@ Reachability data:
 
 Repo: {self.state.repo_path}
 """
-        client = make_llm_client()
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=2000,
-            messages=[{"role": "user", "content": prompt}],
-        )
-
-        raw = response.content[0].text.strip()
+        raw = llm_call(prompt, system=self.system_prompt, max_tokens=2000)
         self.state.challenger_objection = raw
 
         # Parse JSON response

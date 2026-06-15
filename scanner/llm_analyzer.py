@@ -13,8 +13,6 @@ import json
 import os
 from typing import Optional
 
-MODEL_FAST = "claude-sonnet-4-5"
-MODEL_DEEP = "claude-opus-4-5"
 _OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "output")
 
 
@@ -38,12 +36,13 @@ def analyze_findings(
           cve_id, check_id, path, line, vulnerable (bool),
           confidence (0-1), reason, attack_vector
     """
-    from config import make_llm_client
+    from config import make_llm_client, default_model
 
     if not findings:
         return []
 
     client = make_llm_client()
+    model  = default_model()
     confirmed = []
 
     # Group findings by file to reduce LLM calls
@@ -61,13 +60,6 @@ def analyze_findings(
                 reach_index[cve_id] = r
 
     for file_path, file_findings in list(by_file.items())[:20]:  # cap at 20 files
-        # Select model based on severity
-        has_critical = any(
-            f.get("extra", {}).get("severity", "") in ("ERROR", "CRITICAL")
-            for f in file_findings
-        )
-        model = MODEL_DEEP if has_critical else MODEL_FAST
-
         # Build context from findings
         findings_text = _format_findings_for_llm(file_findings)
 
@@ -107,12 +99,12 @@ Respond with a JSON array. Each element:
 Be conservative: only mark as vulnerable=true if a real attacker could exploit it without unrealistic preconditions."""
 
         try:
-            response = client.messages.create(
+            response = client.chat.completions.create(
                 model=model,
                 max_tokens=2048,
                 messages=[{"role": "user", "content": prompt}],
             )
-            raw = response.content[0].text.strip()
+            raw = response.choices[0].message.content.strip()
             # Extract JSON from markdown code block if needed
             if "```json" in raw:
                 raw = raw.split("```json")[1].split("```")[0].strip()

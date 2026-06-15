@@ -68,7 +68,7 @@ def _run_ruleset(repo_path: str, ruleset: str) -> list[dict]:
     try:
         result = subprocess.run(
             [
-                "semgrep",
+                _semgrep_bin(),
                 "--config", ruleset,
                 "--json",
                 "--no-git-ignore",
@@ -109,11 +109,25 @@ def _pick_rulesets(repo_path: str) -> list[str]:
     return list(dict.fromkeys(rulesets))  # deduplicate, preserve order
 
 
+def _semgrep_bin() -> str:
+    """Find the semgrep binary — checks venv, shutil.which, fallback."""
+    import shutil
+    # Check same venv as this Python process
+    import sys
+    venv_bin = os.path.join(os.path.dirname(sys.executable), "semgrep")
+    if os.path.isfile(venv_bin):
+        return venv_bin
+    found = shutil.which("semgrep")
+    if found:
+        return found
+    return "semgrep"  # fallback, will fail gracefully
+
+
 def _semgrep_available() -> bool:
     """Check if semgrep is installed."""
     try:
         result = subprocess.run(
-            ["semgrep", "--version"],
+            [_semgrep_bin(), "--version"],
             capture_output=True,
             timeout=5,
         )

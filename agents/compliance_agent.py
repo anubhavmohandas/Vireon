@@ -18,7 +18,7 @@ import os
 
 from agents.base_agent import BandAgent
 from memory.shared_state import SharedState, AgentResult
-from config import make_llm_client
+from config import llm_call
 
 
 _COMPLIANCE_PROMPT = """
@@ -104,14 +104,7 @@ Original confirmed vulnerabilities:
 {[{"cve_id": c.get("cve_id"), "attack_vector": c.get("attack_vector", "")} for c in confirmed[:10]]}
 """
 
-        client = make_llm_client()
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=1500,
-            messages=[{"role": "user", "content": prompt}],
-        )
-
-        raw = response.content[0].text.strip()
+        raw = llm_call(prompt, system=self.system_prompt, max_tokens=1500)
 
         import json, re
         decisions = []

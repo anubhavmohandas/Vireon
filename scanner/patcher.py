@@ -15,7 +15,6 @@ import re
 import difflib
 from pathlib import Path
 
-MODEL = "claude-sonnet-4-5"
 _OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "output")
 
 
@@ -38,9 +37,10 @@ def run_patcher(
             "dep_bumps": [dependency version bump dicts],
         }
     """
-    from config import make_llm_client
+    from config import make_llm_client, default_model
 
     client = make_llm_client()
+    model  = default_model()
     patches = []
     dep_bumps = []
 
@@ -57,14 +57,14 @@ def run_patcher(
         if not source:
             continue
 
-        patch = _generate_code_patch(client, finding, source, file_path, repo_path)
+        patch = _generate_code_patch(client, model, finding, source, file_path, repo_path)
         if patch:
             patches.append(patch)
             patched_files.add(file_path)
 
     # ── 2. Dependency bumps for CVE-affected packages ───────────────────────
     if all_cves:
-        dep_bumps = _generate_dep_bumps(client, all_cves, repo_path)
+        dep_bumps = _generate_dep_bumps(client, model, all_cves, repo_path)
 
     print(f"[patcher] Generated {len(patches)} code patches, {len(dep_bumps)} dep bumps")
     return {"patches": patches, "dep_bumps": dep_bumps}
@@ -81,6 +81,7 @@ def save_patch_result(patch_result: dict, out_dir: str = _OUT_DIR) -> str:
 
 def _generate_code_patch(
     client,
+    model: str,
     finding: dict,
     source: str,
     file_path: str,
@@ -122,12 +123,12 @@ Respond with JSON:
 Only include the fix. No markdown outside the JSON."""
 
     try:
-        response = client.messages.create(
-            model=MODEL,
+        response = client.chat.completions.create(
+            model=model,
             max_tokens=4096,
             messages=[{"role": "user", "content": prompt}],
         )
-        raw = response.content[0].text.strip()
+        raw = response.choices[0].message.content.strip()
         if "```json" in raw:
             raw = raw.split("```json")[1].split("```")[0].strip()
         elif "```" in raw:
@@ -170,7 +171,7 @@ Only include the fix. No markdown outside the JSON."""
         return None
 
 
-def _generate_dep_bumps(client, all_cves: list[dict], repo_path: str) -> list[dict]:
+def _generate_dep_bumps(client, model: str, all_cves: list[dict], repo_path: str) -> list[dict]:
     """Generate dependency version bumps for CVE-affected packages."""
     if not all_cves:
         return []
@@ -219,12 +220,12 @@ Respond with JSON array:
 ]"""
 
     try:
-        response = client.messages.create(
-            model=MODEL,
+        response = client.chat.completions.create(
+            model=model,
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}],
         )
-        raw = response.content[0].text.strip()
+        raw = response.choices[0].message.content.strip()
         if "```json" in raw:
             raw = raw.split("```json")[1].split("```")[0].strip()
         elif "```" in raw:
