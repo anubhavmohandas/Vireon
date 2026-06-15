@@ -48,18 +48,12 @@ class ThreatIntelAgent(BandAgent):
         return result
 
     def _run_sync(self) -> AgentResult:
-        from sage.config import cfg
-        from sage.fetcher.nvd import fetch_cves_since
-        from sage.fetcher.filter import detect_stack, filter_relevant_cves
-        from sage.fetcher.store import init_db, save_cves
-        from sage.synapse.parser import parse_repo
-        from sage.synapse.mapper import attach_cves, seed_libraries
-        from sage.synapse.export import export_graph
-        from sage.reachability import analyze_reachability, save_reachability
+        from scanner.stack import detect_stack
+        from scanner.osv import fetch_osv_for_stack
+        from scanner.nvd import fetch_nvd_for_stack
+        from scanner.graph import build_graph
 
         repo_path = self.state.repo_path
-        cfg.set_repo(repo_path)
-        init_db()
 
         # Step 1: Detect stack
         stack = detect_stack(repo_path)
@@ -74,51 +68,62 @@ class ThreatIntelAgent(BandAgent):
                 metadata={"reason": "No dependencies detected in repo"},
             )
 
-        # Step 2: Fetch CVEs
-        raw_cves = fetch_cves_since(days=self.days)
-        relevant = filter_relevant_cves(raw_cves, stack)
-        save_cves(relevant)
+        # Step 2: Fetch CVEs — OSV first (reliable), NVD as supplement
+        osv_cves = fetch_osv_for_stack(stack)
+        nvd_cves = fetch_nvd_for_stack(stack, days=self.days)
+
+        # Merge, deduplicate by CVE ID
+        seen_ids = set()
+        relevant = []
+        for cve in osv_cves + nvd_cves:
+            cve_id = cve.get("sage_match", {}).get("cve_id", "")
+            if cve_id not in seen_ids:
+                seen_ids.add(cve_id)
+                relevant.append(cve)
+
         self.state.cves = relevant
 
-        # Step 3: Build knowledge graph
-        G = parse_repo(repo_path)
-        G = seed_libraries(G, repo_path)
-        G = attach_cves(G)
-
-        # Step 4: Reachability
-        reach_results = analyze_reachability(G)
-        save_reachability(reach_results)
-        export_graph(G, repo_path=repo_path, reach_results=reach_results)
-
+        # Step 3: Build lightweight dependency graph
+        G = build_graph(repo_path, stack, relevant)
         self.state.graph = G
-        self.state.reach_results = reach_results
 
-        # Score: ratio of reachable CVEs to total
-        reachable = [r for r in reach_results.values() if r.get("reachable")]
-        confidence = len(reachable) / max(len(relevant), 1)
-        confidence = min(0.95, max(0.1, confidence))
+        # Step 4: Reachability — mark CVEs with network attack vector as reachable
+        reach_dict = {}
+        for cve in relevant:
+            m = cve.get("sage_match", {})
+            cve_id = m.get("cve_id", "")
+            reach_dict[cve_id] = {
+                "cve_id":    cve_id,
+                "package":   m.get("package", ""),
+                "reachable": m.get("attack_vector", "NETWORK") in ("NETWORK", "ADJACENT"),
+                "paths":     [{"entry": "external", "path": ["external", m.get("package", "")], "depth": 1}],
+            }
+        self.state.reach_results = reach_dict
+
+        reachable = [r for r in reach_dict.values() if r.get("reachable")]
+        confidence = min(0.95, max(0.1, len(reachable) / max(len(relevant), 1)))
 
         evidence = [
             {
-                "cve_id": c.get("sage_match", {}).get("cve_id", "?"),
-                "package": c.get("sage_match", {}).get("package", "?"),
+                "cve_id":   c.get("sage_match", {}).get("cve_id", "?"),
+                "package":  c.get("sage_match", {}).get("package", "?"),
                 "severity": c.get("sage_match", {}).get("severity", "?"),
+                "source":   c.get("sage_match", {}).get("source", "NVD"),
             }
             for c in relevant[:20]
         ]
 
-        verdict = "confirmed" if relevant else "rejected"
-
         return AgentResult(
             agent=self.name,
-            verdict=verdict,
+            verdict="confirmed" if relevant else "rejected",
             confidence=confidence,
             evidence=evidence,
             metadata={
-                "stack_packages": len(stack),
-                "cves_fetched": len(raw_cves),
-                "cves_relevant": len(relevant),
-                "reachable_cves": len(reachable),
-                "graph_nodes": G.number_of_nodes(),
+                "stack_packages":  len(stack),
+                "osv_cves":        len(osv_cves),
+                "nvd_cves":        len(nvd_cves),
+                "cves_relevant":   len(relevant),
+                "reachable_cves":  len(reachable),
+                "graph_nodes":     G.number_of_nodes() if G else 0,
             },
         )

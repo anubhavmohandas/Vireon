@@ -1,0 +1,14 @@
+# demo_target — deliberately vulnerable Python web app
+# Used as Vireon's scan target for live demos and submission video
+#
+# These versions have REAL CVEs in NVD — Vireon will find them.
+
+flask==2.2.5              # CVE-2023-30861 — open redirect + cookie security
+requests==2.28.1          # CVE-2024-35195 — no SSL cert verify; CVE-2024-47081 — proxy leak
+setuptools==65.5.0        # CVE-2024-6345 — RCE via malicious package URL
+werkzeug==2.2.3           # CVE-2023-46136 — path traversal
+jinja2==3.0.3             # CVE-2024-22195 — XSS via markup injection
+sqlalchemy==1.4.46        # CVE-2023-30608 — SQL injection via text()
+pyyaml==5.4.1             # CVE-2022-30917 — arbitrary code exec via yaml.load
+pillow==9.4.0             # CVE-2023-44271 — DoS via crafted image
+cryptography==38.0.4      # CVE-2023-0286 — buffer overflow in X.509 parsing
