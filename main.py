@@ -23,9 +23,10 @@ import sys
 import os
 
 # Ensure both Vireon and SAGE are importable
-_ROOT = os.path.dirname(os.path.abspath(__file__))
-_SAGE = os.path.join(_ROOT, "..", "SAGE")
-for p in [_ROOT, _SAGE]:
+_ROOT = os.path.dirname(os.path.abspath(__file__))          # .../Claude/Vireon
+_PARENT = os.path.dirname(_ROOT)                             # .../Claude  (so 'vireon' resolves)
+_SAGE = os.path.join(_PARENT, "SAGE")
+for p in [_PARENT, _SAGE]:
     if p not in sys.path:
         sys.path.insert(0, p)
 

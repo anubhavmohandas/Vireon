@@ -1,24 +1,26 @@
 # Vireon dependencies
-# Install: pip install -r requirements.txt
 #
-# Also install SAGE's own deps:
+# IMPORTANT: Install SAGE dependencies first:
 #   cd ../SAGE && pip install -r requirements.txt
+#
+# Then install Vireon-specific deps:
+#   pip install -r requirements.txt
 
-# Band SDK
-band-sdk[anthropic]          # thenvoi + Band WebSocket client
+# ── Band SDK ──────────────────────────────────────────────────────────────────
+# Install: pip install "band-sdk[anthropic]"
+# This installs the thenvoi package with Anthropic adapter support
+band-sdk[anthropic]
 
-# LLM
-anthropic>=0.25.0
+# ── Async HTTP (for FastAPI backend by Harsh) ─────────────────────────────────
+fastapi==0.115.0
+uvicorn==0.30.6
+httpx==0.27.0
 
-# Env
+# ── All below are already in SAGE/requirements.txt ───────────────────────────
+# Listed here so Vireon can be installed standalone if needed.
+# If SAGE venv is active, these are already satisfied — no conflict.
+anthropic>=0.40.0
 python-dotenv>=1.0.0
-
-# SAGE's deps are inherited when SAGE is on sys.path
-# Key ones listed here for reference:
 requests>=2.31.0
 networkx>=3.0
-semgrep                      # install via: pip install semgrep
-tree-sitter>=0.21.0
-tree-sitter-python
-tree-sitter-javascript
-rich>=13.0.0
+rich>=13.5.2
