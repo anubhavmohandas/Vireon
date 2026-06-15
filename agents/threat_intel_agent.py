@@ -2,7 +2,7 @@
 agents/threat_intel_agent.py — Threat Intelligence Agent
 
 Security role: Threat Researcher
-Internally uses: sage.fetcher.*, sage.reachability, sage.synapse.*
+Internally uses: scanner.stack, scanner.osv, scanner.nvd, scanner.graph (standalone)
 
 Responsibilities:
   1. Detect repo stack (languages, packages, versions)
@@ -14,13 +14,7 @@ Responsibilities:
 This is the widest net — every other agent narrows from here.
 """
 
-import sys
 import os
-
-# Ensure SAGE is importable (sibling directory)
-_SAGE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "SAGE")
-if _SAGE_DIR not in sys.path:
-    sys.path.insert(0, _SAGE_DIR)
 
 from agents.base_agent import BandAgent
 from memory.shared_state import SharedState, AgentResult
@@ -42,7 +36,7 @@ class ThreatIntelAgent(BandAgent):
 
     async def execute(self) -> AgentResult:
         import asyncio
-        # SAGE imports — these are sync; run in executor to not block event loop
+        # scanner.* calls are sync; run in executor to not block event loop
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, self._run_sync)
         return result

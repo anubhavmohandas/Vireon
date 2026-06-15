@@ -24,10 +24,8 @@ import os
 import sys
 
 _ROOT = os.path.dirname(os.path.abspath(__file__))
-_SAGE = os.path.join(_ROOT, "..", "SAGE")
-for p in [_ROOT, os.path.abspath(_SAGE)]:
-    if p not in sys.path:
-        sys.path.insert(0, p)
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 from memory.shared_state import SharedState, AgentResult
 from coordinator.coordinator import Coordinator

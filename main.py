@@ -22,12 +22,10 @@ import asyncio
 import sys
 import os
 
-# Ensure both Vireon and SAGE are importable
-_ROOT = os.path.dirname(os.path.abspath(__file__))          # .../Claude/Vireon
-_SAGE = os.path.join(_ROOT, "..", "SAGE")
-for p in [_ROOT, os.path.abspath(_SAGE)]:
-    if p not in sys.path:
-        sys.path.insert(0, p)
+# Ensure Vireon root is importable (flat imports like `from coordinator.coordinator import`)
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 from coordinator.coordinator import Coordinator
 

@@ -2,23 +2,18 @@
 agents/pr_agent.py — PR Agent
 
 Security role: Delivery Engineer
-Internally uses: sage.github.pr
+Internally uses: scanner.github_pr (standalone, no SAGE dependency)
 
 Responsibilities:
   1. Create GitHub PR with the verified patch
   2. PR body includes: CVE list, attack vectors, patch explanation, confidence scores
-  3. Links to Synapse graph export
+  3. Falls back to output/pr_draft.md if GITHUB_TOKEN not set
   4. Only runs after VerificationAgent confirms
 
 This is the terminal action — visible artifact that judges can check.
 """
 
-import sys
 import os
-
-_SAGE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "SAGE")
-if _SAGE_DIR not in sys.path:
-    sys.path.insert(0, _SAGE_DIR)
 
 from agents.base_agent import BandAgent
 from memory.shared_state import SharedState, AgentResult
@@ -41,7 +36,7 @@ class PRAgent(BandAgent):
         return await loop.run_in_executor(None, self._run_sync)
 
     def _run_sync(self) -> AgentResult:
-        from sage.github.pr import run_github_pr, save_pr_result
+        from scanner.github_pr import run_github_pr, save_pr_result
 
         patch_result = self.state.patch_result
         confirmed = self.state.confirmed

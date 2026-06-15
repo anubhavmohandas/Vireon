@@ -2,7 +2,7 @@
 agents/verification_agent.py — Verification Agent
 
 Security role: QA / Security Verifier
-Internally uses: sage.tests.runner, sage.verifier.semgrep
+Internally uses: scanner.verifier (standalone, no SAGE dependency)
 
 Responsibilities:
   1. Run existing tests against patched code
@@ -13,12 +13,7 @@ Responsibilities:
 This is the closed loop — patch doesn't ship until verification passes.
 """
 
-import sys
 import os
-
-_SAGE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "SAGE")
-if _SAGE_DIR not in sys.path:
-    sys.path.insert(0, _SAGE_DIR)
 
 from agents.base_agent import BandAgent
 from memory.shared_state import SharedState, AgentResult
@@ -42,8 +37,7 @@ class VerificationAgent(BandAgent):
         return await loop.run_in_executor(None, self._run_sync)
 
     def _run_sync(self) -> AgentResult:
-        from sage.tests.runner import run_tests, save_test_results
-        from sage.verifier.semgrep import run_verifier, save_verifier_results
+        from scanner.verifier import run_tests, save_test_results, run_verifier, save_verifier_results
 
         patch_result = self.state.patch_result
         confirmed = self.state.confirmed

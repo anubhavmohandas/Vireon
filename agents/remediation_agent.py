@@ -2,7 +2,7 @@
 agents/remediation_agent.py — Remediation Agent
 
 Security role: Security Engineer (Fix Generation)
-Internally uses: sage.patcher.llm
+Internally uses: scanner.patcher (standalone, no SAGE dependency)
 
 Responsibilities:
   1. Generate patches for confirmed + upheld vulnerabilities
@@ -12,12 +12,7 @@ Responsibilities:
 Runs after ChallengerAgent confirms findings are real.
 """
 
-import sys
 import os
-
-_SAGE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "SAGE")
-if _SAGE_DIR not in sys.path:
-    sys.path.insert(0, _SAGE_DIR)
 
 from agents.base_agent import BandAgent
 from memory.shared_state import SharedState, AgentResult
@@ -41,7 +36,7 @@ class RemediationAgent(BandAgent):
         return await loop.run_in_executor(None, self._run_sync)
 
     def _run_sync(self) -> AgentResult:
-        from sage.patcher.llm import run_patcher
+        from scanner.patcher import run_patcher
 
         confirmed = self.state.confirmed
         repo_path = self.state.repo_path

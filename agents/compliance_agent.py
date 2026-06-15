@@ -14,12 +14,7 @@ This is what makes the remediation loop non-trivial.
 Judges see: patch generated → compliance rejected → patch regenerated → approved.
 """
 
-import sys
 import os
-
-_SAGE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "SAGE")
-if _SAGE_DIR not in sys.path:
-    sys.path.insert(0, _SAGE_DIR)
 
 from agents.base_agent import BandAgent
 from memory.shared_state import SharedState, AgentResult

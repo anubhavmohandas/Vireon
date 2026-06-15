@@ -2,7 +2,7 @@
 agents/static_agent.py — Static Analysis Agent
 
 Security role: Code Analyst
-Internally uses: sage.scanner.semgrep, sage.verifier.semgrep
+Internally uses: scanner.semgrep (standalone, no SAGE dependency)
 
 Responsibilities:
   1. Run Semgrep on the blast radius of CVE-exposed functions
@@ -13,12 +13,7 @@ Runs in parallel with ThreatIntelAgent during the evidence-gathering phase.
 Requires: state.graph must be populated (ThreatIntelAgent must finish first).
 """
 
-import sys
 import os
-
-_SAGE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "SAGE")
-if _SAGE_DIR not in sys.path:
-    sys.path.insert(0, _SAGE_DIR)
 
 from agents.base_agent import BandAgent
 from memory.shared_state import SharedState, AgentResult
@@ -40,22 +35,13 @@ class StaticAgent(BandAgent):
         return await loop.run_in_executor(None, self._run_sync)
 
     def _run_sync(self) -> AgentResult:
-        from sage.scanner.semgrep import scan_blast_radius, save_findings, print_findings_summary
+        from scanner.semgrep import run_semgrep, normalize_findings
 
-        G = self.state.graph
         repo_path = self.state.repo_path
+        cves = self.state.cves
 
-        if G is None:
-            return AgentResult(
-                agent=self.name,
-                verdict="inconclusive",
-                confidence=0.0,
-                evidence=[],
-                metadata={"reason": "Knowledge graph not ready — ThreatIntelAgent must run first"},
-            )
-
-        findings = scan_blast_radius(G, repo_path)
-        save_findings(findings)
+        findings_raw = run_semgrep(repo_path, cves=cves)
+        findings = normalize_findings(findings_raw)
         self.state.findings = findings
 
         if not findings:
