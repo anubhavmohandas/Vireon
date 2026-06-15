@@ -29,17 +29,17 @@ The coordinator posts live updates to the Band room throughout.
 import asyncio
 from datetime import datetime
 
-from vireon.memory.shared_state import SharedState
-from vireon.agents.threat_intel_agent import ThreatIntelAgent
-from vireon.agents.static_agent import StaticAgent
-from vireon.agents.exploitability_agent import ExploitabilityAgent
-from vireon.agents.challenger_agent import ChallengerAgent
-from vireon.agents.remediation_agent import RemediationAgent
-from vireon.agents.compliance_agent import ComplianceAgent
-from vireon.agents.verification_agent import VerificationAgent
-from vireon.agents.pr_agent import PRAgent
-from vireon.config import vcfg
-from vireon.coordinator.summary import generate_summary
+from memory.shared_state import SharedState
+from agents.threat_intel_agent import ThreatIntelAgent
+from agents.static_agent import StaticAgent
+from agents.exploitability_agent import ExploitabilityAgent
+from agents.challenger_agent import ChallengerAgent
+from agents.remediation_agent import RemediationAgent
+from agents.compliance_agent import ComplianceAgent
+from agents.verification_agent import VerificationAgent
+from agents.pr_agent import PRAgent
+from config import vcfg
+from coordinator.summary import generate_summary
 
 
 class Coordinator:

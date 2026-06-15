@@ -52,7 +52,7 @@ Output (terminal + Band room):
 
 from __future__ import annotations
 from datetime import datetime
-from vireon.memory.shared_state import SharedState
+from memory.shared_state import SharedState
 
 
 BOLD  = "\033[1m"

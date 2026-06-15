@@ -18,7 +18,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from vireon.memory.shared_state import SharedState, AgentResult
+from memory.shared_state import SharedState, AgentResult
 
 
 class BandAgent(ABC):

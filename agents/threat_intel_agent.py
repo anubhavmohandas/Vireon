@@ -22,8 +22,8 @@ _SAGE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "SAGE")
 if _SAGE_DIR not in sys.path:
     sys.path.insert(0, _SAGE_DIR)
 
-from vireon.agents.base_agent import BandAgent
-from vireon.memory.shared_state import SharedState, AgentResult
+from agents.base_agent import BandAgent
+from memory.shared_state import SharedState, AgentResult
 
 
 class ThreatIntelAgent(BandAgent):
