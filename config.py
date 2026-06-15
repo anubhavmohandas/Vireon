@@ -21,7 +21,7 @@ load_dotenv()
 
 
 # ── Default model per provider ────────────────────────────────────────────────
-_FEATHERLESS_MODEL = "meta-llama/Llama-3.3-70B-Instruct"
+_FEATHERLESS_MODEL = "Qwen/Qwen2.5-72B-Instruct"
 _AIML_MODEL        = "claude-sonnet-4-5"
 _ANTHROPIC_MODEL   = "claude-sonnet-4-5"
 

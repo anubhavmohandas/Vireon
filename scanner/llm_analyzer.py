@@ -52,12 +52,17 @@ def analyze_findings(
         by_file.setdefault(path, []).append(f)
 
     # Build reachability index for context
+    # reach_results can be a list[dict] or dict{cve_id: dict} — handle both
     reach_index: dict[str, dict] = {}
     if reach_results:
-        for r in reach_results:
-            cve_id = r.get("cve_id", "")
-            if cve_id:
-                reach_index[cve_id] = r
+        if isinstance(reach_results, dict):
+            reach_index = reach_results  # already keyed by cve_id
+        else:
+            for r in reach_results:
+                if isinstance(r, dict):
+                    cve_id = r.get("cve_id", "")
+                    if cve_id:
+                        reach_index[cve_id] = r
 
     for file_path, file_findings in list(by_file.items())[:20]:  # cap at 20 files
         # Build context from findings

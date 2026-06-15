@@ -71,13 +71,23 @@ def _run_ruleset(repo_path: str, ruleset: str) -> list[dict]:
                 _semgrep_bin(),
                 "--config", ruleset,
                 "--json",
-                "--no-git-ignore",
                 "--quiet",
+                "--timeout", "30",
+                "--max-memory", "1000",
+                "--exclude", "venv",
+                "--exclude", "myvenv",
+                "--exclude", ".venv",
+                "--exclude", "env",
+                "--exclude", "node_modules",
+                "--exclude", "data",
+                "--exclude", "*.egg-info",
+                "--exclude", "dist",
+                "--exclude", "build",
                 repo_path,
             ],
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=300,
         )
         if result.stdout:
             data = json.loads(result.stdout)
@@ -94,17 +104,25 @@ def _run_ruleset(repo_path: str, ruleset: str) -> list[dict]:
 def _pick_rulesets(repo_path: str) -> list[str]:
     """Pick relevant rulesets based on what's in the repo."""
     path = Path(repo_path)
-    rulesets = ["p/owasp-top-ten", "p/secrets"]  # always run these
+    rulesets = []
 
-    # Python
+    # Python — use p/python which is fast and comprehensive
     py_files = list(path.rglob("*.py"))
     if py_files or (path / "requirements.txt").exists():
-        rulesets.extend(["p/python", "p/sql-injection", "p/command-injection"])
+        rulesets.append("p/python")
 
     # JavaScript/Node
     js_files = list(path.rglob("*.js")) + list(path.rglob("*.ts"))
     if js_files or (path / "package.json").exists():
-        rulesets.extend(["p/javascript", "p/xss"])
+        rulesets.append("p/javascript")
+
+    # Always check secrets — fast rule, high value
+    rulesets.append("p/secrets")
+
+    # Only add heavy rulesets if repo is small enough (< 100 files)
+    total_files = len(py_files) + len(js_files)
+    if total_files < 100:
+        rulesets.append("p/owasp-top-ten")
 
     return list(dict.fromkeys(rulesets))  # deduplicate, preserve order
 
