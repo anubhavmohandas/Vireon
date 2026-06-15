@@ -1,0 +1,24 @@
+# Vireon dependencies
+# Install: pip install -r requirements.txt
+#
+# Also install SAGE's own deps:
+#   cd ../SAGE && pip install -r requirements.txt
+
+# Band SDK
+band-sdk[anthropic]          # thenvoi + Band WebSocket client
+
+# LLM
+anthropic>=0.25.0
+
+# Env
+python-dotenv>=1.0.0
+
+# SAGE's deps are inherited when SAGE is on sys.path
+# Key ones listed here for reference:
+requests>=2.31.0
+networkx>=3.0
+semgrep                      # install via: pip install semgrep
+tree-sitter>=0.21.0
+tree-sitter-python
+tree-sitter-javascript
+rich>=13.0.0
