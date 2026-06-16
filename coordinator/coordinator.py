@@ -38,7 +38,7 @@ from agents.remediation_agent import RemediationAgent
 from agents.compliance_agent import ComplianceAgent
 from agents.verification_agent import VerificationAgent
 from agents.delivery_agent import DeliveryAgent
-from config import vcfg, CONFIDENCE_THRESHOLD
+from config import vcfg, CONFIDENCE_THRESHOLD, CHALLENGER_VETO_THRESHOLD
 from coordinator.summary import generate_summary
 
 
@@ -77,9 +77,9 @@ class Coordinator:
         print(f"  Investigation ID: {state.inv_id}\n")
 
         # ── Phase 1: ThreatIntel + Static run in parallel ─────────────────────
-        # StaticAgent (Semgrep) is independent — it only needs repo_path.
-        # ThreatIntel builds the graph + fetches CVEs concurrently.
-        # Both write to SharedState under asyncio.Lock, so no races.
+        # StaticAgent (Semgrep) is independent — only needs repo_path.
+        # ThreatIntel builds the graph + CVEs concurrently.
+        # return_exceptions=True so one crash doesn't silently discard the other's result.
         print("\n[Phase 1] Threat Intelligence + Static Analysis (parallel)\n")
         threat_agent = self._make_agent(
             ThreatIntelAgent,
@@ -88,14 +88,44 @@ class Coordinator:
         )
         static_agent = self._make_agent(StaticAgent, "STATIC_AGENT_ID", "STATIC_AGENT_KEY")
 
-        await asyncio.gather(
+        phase1_results = await asyncio.gather(
             threat_agent.run(),
             static_agent.run(),
+            return_exceptions=True,
         )
+        threat_exc, static_exc = phase1_results
+
+        # ── Partial failure semantics ──────────────────────────────────────────
+        # ThreatIntel failure = hard abort (no graph → nothing to reason about).
+        # Static failure = soft degraded mode (log it, continue without Semgrep findings).
+        if isinstance(threat_exc, Exception):
+            await state.add_event(
+                "coordinator", "aborted",
+                detail=f"ThreatIntel failed: {threat_exc}",
+            )
+            await state.log_decision(
+                "coordinator", "PHASE1_ABORT",
+                reason=f"ThreatIntel exception: {str(threat_exc)[:200]}",
+            )
+            print(f"\n[Vireon] ThreatIntel failed — cannot proceed: {threat_exc}")
+            await self._print_summary()
+            return
+
+        if isinstance(static_exc, Exception):
+            await state.add_event(
+                "coordinator", "degraded",
+                detail=f"StaticAgent failed: {static_exc} — continuing without Semgrep findings",
+            )
+            await state.log_decision(
+                "coordinator", "STATIC_SKIPPED",
+                reason=f"StaticAgent exception: {str(static_exc)[:200]}",
+            )
+            print(f"\n[Vireon] ⚠ StaticAgent failed ({static_exc}) — proceeding in degraded mode (CVE-only analysis)")
 
         if not state.graph:
             await state.add_event("coordinator", "aborted", "No knowledge graph — cannot proceed")
             print("\n[Vireon] No graph built — is the repo path correct and does it have dependencies?")
+            await self._print_summary()
             return
 
         await state.add_event(
@@ -137,6 +167,40 @@ class Coordinator:
             confidence=fused,
         )
         print(f"\n[Coordinator] Fused confidence: {fused:.2f}")
+
+        # ── Challenger veto check (enterprise mode) ────────────────────────────
+        # Disabled by default (CHALLENGER_VETO_THRESHOLD=1.0).
+        # When enabled: if Challenger found strong counter evidence above the threshold,
+        # escalate rather than proceeding — forces re-analysis before patching.
+        # To enable: set CHALLENGER_VETO_THRESHOLD=0.8 in .env
+        challenger_result = await state.get_result("challenger")
+        if (
+            challenger_result is not None
+            and challenger_result.verdict == "counter_evidence_found"
+            and challenger_result.confidence >= CHALLENGER_VETO_THRESHOLD
+        ):
+            await state.add_event(
+                "coordinator", "challenger_veto",
+                detail=(
+                    f"Challenger confidence {challenger_result.confidence:.2f} "
+                    f">= veto threshold {CHALLENGER_VETO_THRESHOLD} — escalating"
+                ),
+                confidence=challenger_result.confidence,
+            )
+            await state.log_decision(
+                "coordinator", "CHALLENGER_VETO_TRIGGERED",
+                reason=(
+                    f"Strong counter evidence (conf={challenger_result.confidence:.2f}) — "
+                    f"set CHALLENGER_VETO_THRESHOLD higher to suppress"
+                ),
+            )
+            print(
+                f"\n[Vireon] ⚔ Challenger veto triggered "
+                f"(conf={challenger_result.confidence:.2f} >= {CHALLENGER_VETO_THRESHOLD}). "
+                f"Investigation escalated — manual review required."
+            )
+            await self._print_summary()
+            return
 
         if fused < CONFIDENCE_THRESHOLD:
             await state.add_event("coordinator", "aborted", f"Fused confidence too low ({fused:.2f} < {CONFIDENCE_THRESHOLD}) — investigation inconclusive")

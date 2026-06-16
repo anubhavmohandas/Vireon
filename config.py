@@ -33,6 +33,13 @@ CONFIDENCE_THRESHOLD: float = float(os.getenv("CONFIDENCE_THRESHOLD", "0.3"))
 # Max times RemediationAgent retries before coordinator gives up.
 MAX_REMEDIATION_ATTEMPTS: int = int(os.getenv("MAX_REMEDIATION_ATTEMPTS", "3"))
 
+# Challenger veto threshold (enterprise mode).
+# If Challenger confidence exceeds this AND verdict is "counter_evidence_found",
+# coordinator can escalate rather than just weighting the score down.
+# Set to 1.0 to disable (default — advisory-only mode for hackathon).
+# Set to e.g. 0.8 to enable: strong counter evidence triggers re-analysis.
+CHALLENGER_VETO_THRESHOLD: float = float(os.getenv("CHALLENGER_VETO_THRESHOLD", "1.0"))
+
 
 # ── Default model per provider ────────────────────────────────────────────────
 _FEATHERLESS_MODEL = "Qwen/Qwen2.5-72B-Instruct"

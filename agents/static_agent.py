@@ -10,7 +10,8 @@ Responsibilities:
   3. Report pattern-level evidence (SQL injection, command injection, etc.)
 
 Runs in parallel with ThreatIntelAgent during the evidence-gathering phase.
-Requires: state.graph must be populated (ThreatIntelAgent must finish first).
+No dependency on ThreatIntel — Semgrep only needs repo_path.
+Uses state.cves for context if available, but proceeds without it.
 """
 
 import os
