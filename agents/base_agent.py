@@ -122,6 +122,15 @@ class BandAgent(ABC):
                 reason=str(result.metadata.get("reason", ""))[:120],
             )
             await self.state.record_confidence(self.name, result.confidence)
+
+            # Snapshot the running fused value so ConfidenceGraph can plot
+            # the fused line rising/falling over the investigation, not just
+            # individual agent dots.
+            fused = await self.state.fused_confidence()
+            await self.state.record_confidence(
+                "fused", fused, label=f"after_{self.name}"
+            )
+
             await self.post_to_room(
                 f"✅ [{self.state.inv_id}] {self.name} finished — verdict: {result.verdict} "
                 f"(confidence: {result.confidence:.2f}, {result.duration_ms}ms)\n"
