@@ -109,9 +109,10 @@ class BandAgent(ABC):
             result.depends_on = list(self.depends_on)
 
             await self.state.post_result(self.name, result)
+            rich = self._rich_detail(result)
             await self.state.add_event(
                 self.name, "finished",
-                detail=f"{result.verdict} | {len(result.evidence)} items | {result.duration_ms}ms",
+                detail=rich,
                 confidence=result.confidence,
             )
             # Auto-record in decision log + confidence evolution
@@ -124,6 +125,7 @@ class BandAgent(ABC):
             await self.post_to_room(
                 f"✅ [{self.state.inv_id}] {self.name} finished — verdict: {result.verdict} "
                 f"(confidence: {result.confidence:.2f}, {result.duration_ms}ms)\n"
+                f"  {rich}\n"
                 f"{self._summarize(result)}"
             )
             return result
@@ -132,6 +134,17 @@ class BandAgent(ABC):
             await self.state.add_event(self.name, "error", detail=str(e))
             await self.post_to_room(f"❌ [{self.state.inv_id}] {self.name} error: {e}")
             raise
+
+    def _rich_detail(self, result: AgentResult) -> str:
+        """
+        One-line human-readable summary shown in the timeline.
+        Override in subclasses to add agent-specific reasoning.
+        Default: verdict + item count + duration.
+        """
+        return (
+            f"{result.verdict} | {len(result.evidence)} items | "
+            f"conf={result.confidence:.2f} | {result.duration_ms}ms"
+        )
 
     def _summarize(self, result: AgentResult) -> str:
         """Short human-readable summary of result for Band room."""

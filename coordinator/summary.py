@@ -121,11 +121,35 @@ async def generate_summary(state: SharedState, elapsed_s: float) -> str:
         r = results.get(agent)
         if r is None:
             continue
-        tick = "✓" if r.verdict == "confirmed" else ("✗" if r.verdict == "rejected" else "~")
+        # Challenger uses distinct verdicts — map them to display symbols
+        if agent == "challenger":
+            v = r.verdict
+            if v == "counter_evidence_found":
+                tick = "~"   # mitigations found — reduces confidence
+            elif v == "no_counter_evidence":
+                tick = "✓"   # couldn't disprove — strengthens the case
+            else:
+                tick = "~"   # inconclusive / error
+        else:
+            tick = "✓" if r.verdict == "confirmed" else ("✗" if r.verdict == "rejected" else "~")
         extra = ""
-        if agent == "challenger" and r.verdict == "confirmed":
+        if agent == "challenger":
+            status = r.metadata.get("status", "")
             dismissed = r.metadata.get("dismissed", 0)
-            extra = f"  ({dismissed} dismissed — findings upheld)" if dismissed else "  (no mitigations found)"
+            reduced = r.metadata.get("reduced", 0)
+            if status == "API_ERROR":
+                extra = "  (API error — skipped)"
+            elif status == "PARSE_ERROR":
+                extra = "  (parse error — treated as no counter evidence)"
+            elif r.verdict == "counter_evidence_found":
+                parts = []
+                if dismissed:
+                    parts.append(f"{dismissed} dismissed")
+                if reduced:
+                    parts.append(f"{reduced} reduced")
+                extra = f"  ({', '.join(parts)})"
+            else:
+                extra = "  (no mitigations found — case strengthened)"
         if agent == "compliance":
             attempt = results.get("remediation", None)
             att_num = attempt.metadata.get("attempt", 1) if attempt else 1

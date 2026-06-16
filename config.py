@@ -20,6 +20,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+# ── Pipeline tuning knobs ─────────────────────────────────────────────────────
+# Change these to tune without touching agent code.
+
+# Weight of the Challenger agent in fused_confidence().
+# Negative because higher challenger confidence = more doubt cast on findings.
+CHALLENGER_WEIGHT: float = float(os.getenv("CHALLENGER_WEIGHT", "-0.15"))
+
+# Pipeline aborts (no patch generated) if fused confidence falls below this.
+CONFIDENCE_THRESHOLD: float = float(os.getenv("CONFIDENCE_THRESHOLD", "0.3"))
+
+# Max times RemediationAgent retries before coordinator gives up.
+MAX_REMEDIATION_ATTEMPTS: int = int(os.getenv("MAX_REMEDIATION_ATTEMPTS", "3"))
+
+
 # ── Default model per provider ────────────────────────────────────────────────
 _FEATHERLESS_MODEL = "Qwen/Qwen2.5-72B-Instruct"
 _AIML_MODEL        = "claude-sonnet-4-5"

@@ -37,10 +37,19 @@ class ThreatIntelAgent(BandAgent):
 
     async def execute(self) -> AgentResult:
         import asyncio
-        # scanner.* calls are sync; run in executor to not block event loop
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, self._run_sync)
         return result
+
+    def _rich_detail(self, result: AgentResult) -> str:
+        m = result.metadata
+        return (
+            f"stack={m.get('stack_packages', '?')} pkgs | "
+            f"CVEs fetched={m.get('cves_fetched', '?')} "
+            f"(OSV={m.get('osv_cves', '?')} NVD={m.get('nvd_cves', '?')}) | "
+            f"reachable={m.get('reachable_cves', '?')} | "
+            f"conf={result.confidence:.2f} +{result.duration_ms}ms"
+        )
 
     def _run_sync(self) -> AgentResult:
         from engine.stack import detect_stack

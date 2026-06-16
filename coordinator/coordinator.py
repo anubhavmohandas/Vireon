@@ -38,7 +38,7 @@ from agents.remediation_agent import RemediationAgent
 from agents.compliance_agent import ComplianceAgent
 from agents.verification_agent import VerificationAgent
 from agents.delivery_agent import DeliveryAgent
-from config import vcfg
+from config import vcfg, CONFIDENCE_THRESHOLD
 from coordinator.summary import generate_summary
 
 
@@ -76,26 +76,27 @@ class Coordinator:
         await state.add_event("coordinator", "started", f"[{state.inv_id}] repo={self.repo_path}")
         print(f"  Investigation ID: {state.inv_id}\n")
 
-        # ── Phase 1: Threat Intel must run first (builds the graph) ───────────
-        print("\n[Phase 1] Threat Intelligence + Knowledge Graph\n")
+        # ── Phase 1: ThreatIntel + Static run in parallel ─────────────────────
+        # StaticAgent (Semgrep) is independent — it only needs repo_path.
+        # ThreatIntel builds the graph + fetches CVEs concurrently.
+        # Both write to SharedState under asyncio.Lock, so no races.
+        print("\n[Phase 1] Threat Intelligence + Static Analysis (parallel)\n")
         threat_agent = self._make_agent(
             ThreatIntelAgent,
             "THREAT_AGENT_ID", "THREAT_AGENT_KEY",
             days=self.days,
         )
-        await threat_agent.run()
+        static_agent = self._make_agent(StaticAgent, "STATIC_AGENT_ID", "STATIC_AGENT_KEY")
+
+        await asyncio.gather(
+            threat_agent.run(),
+            static_agent.run(),
+        )
 
         if not state.graph:
             await state.add_event("coordinator", "aborted", "No knowledge graph — cannot proceed")
             print("\n[Vireon] No graph built — is the repo path correct and does it have dependencies?")
             return
-
-        # ── Phase 1b: Static analysis runs immediately after graph is ready ───
-        # In a full parallel system, Static would subscribe to graph-ready event.
-        # For the hackathon: sequential but fast — graph is in memory already.
-        print("\n[Phase 1b] Static Analysis\n")
-        static_agent = self._make_agent(StaticAgent, "STATIC_AGENT_ID", "STATIC_AGENT_KEY")
-        await static_agent.run()
 
         await state.add_event(
             "coordinator", "evidence_gathered",
@@ -137,9 +138,9 @@ class Coordinator:
         )
         print(f"\n[Coordinator] Fused confidence: {fused:.2f}")
 
-        if fused < 0.3:
-            await state.add_event("coordinator", "aborted", f"Fused confidence too low ({fused:.2f}) — investigation inconclusive")
-            print(f"\n[Vireon] Fused confidence {fused:.2f} below threshold — not proceeding to patch.")
+        if fused < CONFIDENCE_THRESHOLD:
+            await state.add_event("coordinator", "aborted", f"Fused confidence too low ({fused:.2f} < {CONFIDENCE_THRESHOLD}) — investigation inconclusive")
+            print(f"\n[Vireon] Fused confidence {fused:.2f} below threshold {CONFIDENCE_THRESHOLD} — not proceeding to patch.")
             await self._print_summary()
             return
 

@@ -72,7 +72,8 @@ class SharedState:
         self.challenger_objection: Optional[str] = None
         self.compliance_approved: Optional[bool] = None
         self.remediation_attempts: int = 0
-        self.max_remediation_attempts: int = 3
+        from config import MAX_REMEDIATION_ATTEMPTS
+        self.max_remediation_attempts: int = MAX_REMEDIATION_ATTEMPTS
 
         # Decision log — append-only audit trail of every key decision
         self._decision_log: list[dict] = []
@@ -174,11 +175,12 @@ class SharedState:
         Weighted average across agent confidences.
         Challenger reduces the score (negative weight).
         """
+        from config import CHALLENGER_WEIGHT
         weights = {
             "threat":          0.25,
             "static":          0.25,
             "exploitability":  0.35,
-            "challenger":     -0.15,   # challenger reduces total confidence
+            "challenger":      CHALLENGER_WEIGHT,   # tunable via config/env
         }
         async with self._lock:
             total_w = 0.0

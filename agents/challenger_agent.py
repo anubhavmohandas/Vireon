@@ -2,22 +2,32 @@
 agents/challenger_agent.py — Challenger Agent (Counter Evidence)
 
 Security role: Red Team Reviewer
-No SAGE module — this is Vireon's original IP.
+No engine module — this is Vireon's original IP.
 
 Responsibilities:
   1. Actively attempt to disprove ExploitabilityAgent's verdict
   2. Look for: sanitization, auth requirements, mitigating controls, unreachable paths
   3. Reduce confidence if mitigating factors found
-  4. If it can't disprove → confidence stays high (good signal)
+  4. If it can't disprove → that strengthens the case
+
+Verdict semantics (distinct from other agents):
+  "counter_evidence_found"  — Challenger found mitigating factors (≥1 finding dismissed/reduced)
+  "no_counter_evidence"     — Challenger tried but couldn't disprove anything (strengthens case)
+  "inconclusive"            — Nothing to challenge, or hard failure
+
+Status field in metadata:
+  "SUCCESS"             — LLM responded + JSON parsed correctly
+  "NO_COUNTER_EVIDENCE" — LLM responded but found nothing to challenge
+  "PARSE_ERROR"         — LLM responded but JSON extraction failed
+  "API_ERROR"           — LLM call itself failed
 
 This is the "disagreement" that makes Vireon a real war room, not a pipeline.
-Band room will show this as a visible debate between agents.
 """
 
-import os
+import json
+import re
 
 from agents.base_agent import BandAgent
-from memory.shared_state import SharedState
 from agents.result import AgentResult
 from config import llm_call
 
@@ -75,26 +85,28 @@ class ChallengerAgent(BandAgent):
                 verdict="inconclusive",
                 confidence=0.0,
                 evidence=[],
-                metadata={"reason": "Nothing to challenge — no confirmed vulnerabilities"},
+                metadata={
+                    "status": "NO_COUNTER_EVIDENCE",
+                    "reason": "Nothing to challenge — no confirmed vulnerabilities",
+                },
             )
 
         # Build context for LLM challenge
-        findings_summary = []
-        for c in confirmed[:10]:  # Limit to avoid token explosion
-            findings_summary.append({
+        findings_summary = [
+            {
                 "cve_id": c.get("cve_id", "?"),
                 "reason": c.get("reason", ""),
                 "attack_vector": c.get("attack_vector", ""),
                 "affected_functions": c.get("affected_functions", []),
                 "confidence": c.get("confidence", 0.5),
-            })
-
-        reachability_summary = {}
-        for k, v in list(reach_results.items())[:10]:
-            reachability_summary[k] = {
-                "reachable": v.get("reachable", False),
-                "paths": v.get("paths", [])[:2],
             }
+            for c in confirmed[:10]
+        ]
+
+        reachability_summary = {
+            k: {"reachable": v.get("reachable", False), "paths": v.get("paths", [])[:2]}
+            for k, v in list(reach_results.items())[:10]
+        }
 
         prompt = f"""
 {_CHALLENGER_PROMPT}
@@ -107,62 +119,126 @@ Reachability data:
 
 Repo: {self.state.repo_path}
 """
-        raw = llm_call(prompt, system=self.system_prompt, max_tokens=2000)
-        self.state.challenger_objection = raw
 
-        # Parse JSON response
-        import json
-        import re
-        challenges = []
+        # ── LLM call ──────────────────────────────────────────────────────────
         try:
-            # Extract JSON array from response
+            raw = llm_call(prompt, system=self.system_prompt, max_tokens=2000)
+        except Exception as e:
+            self.state.challenger_objection = f"API_ERROR: {e}"
+            return AgentResult(
+                agent=self.name,
+                verdict="inconclusive",
+                confidence=0.0,
+                evidence=[],
+                metadata={
+                    "status": "API_ERROR",
+                    "error": str(e)[:200],
+                    "reason": "LLM call failed — pipeline continues with reduced confidence",
+                },
+            )
+
+        # ── JSON parse ────────────────────────────────────────────────────────
+        challenges = []
+        parse_error = None
+        try:
             match = re.search(r'\[.*\]', raw, re.DOTALL)
             if match:
                 challenges = json.loads(match.group())
-        except Exception:
-            challenges = []
+            else:
+                parse_error = "No JSON array found in LLM response"
+        except Exception as e:
+            parse_error = str(e)[:200]
 
-        # Calculate confidence adjustment
+        if parse_error:
+            self.state.challenger_objection = f"PARSE_ERROR: {parse_error}"
+            return AgentResult(
+                agent=self.name,
+                verdict="inconclusive",
+                confidence=0.1,
+                evidence=[{"raw_response": raw[:500]}],
+                metadata={
+                    "status": "PARSE_ERROR",
+                    "error": parse_error,
+                    "reason": "LLM responded but JSON extraction failed — treating as no counter evidence",
+                },
+            )
+
+        # ── Tally results ─────────────────────────────────────────────────────
         total_adjustment = 0.0
         evidence = []
         dismissed_count = 0
+        reductions = []
+        upheld = []
 
         for ch in challenges:
-            adj = ch.get("confidence_adjustment", 0.0)
+            adj = float(ch.get("confidence_adjustment", 0.0))
             total_adjustment += adj
-            verdict = ch.get("challenge", "UPHELD")
-            if verdict == "DISMISSED":
+            challenge_verdict = ch.get("challenge", "UPHELD")
+
+            if challenge_verdict == "DISMISSED":
                 dismissed_count += 1
+            elif challenge_verdict == "REDUCED":
+                reductions.append(ch)
+            else:
+                upheld.append(ch)
+
             evidence.append({
                 "cve_id": ch.get("cve_id", "?"),
-                "challenge": verdict,
+                "challenge": challenge_verdict,
                 "adjustment": adj,
                 "reason": ch.get("reason", "")[:150],
             })
 
-        # Challenger's own confidence = how strongly it challenged
-        challenger_confidence = min(0.9, abs(total_adjustment) + 0.1) if challenges else 0.1
+        # If LLM returned an empty array → no counter evidence found
+        if not challenges:
+            self.state.challenger_objection = "LLM returned empty challenge list — no counter evidence"
+            return AgentResult(
+                agent=self.name,
+                verdict="no_counter_evidence",
+                confidence=0.1,
+                evidence=[],
+                metadata={
+                    "status": "NO_COUNTER_EVIDENCE",
+                    "reason": "LLM found no mitigating factors — strengthens the case against",
+                    "challenges_raised": 0,
+                    "dismissed": 0,
+                    "reduced": 0,
+                    "upheld": 0,
+                    "total_confidence_adjustment": 0.0,
+                },
+            )
 
-        # Post objection to Band room for drama
-        objection_summary = f"⚔️ Challenger reviewed {len(confirmed)} findings. "
+        # Challenger confidence = magnitude of adjustments it made
+        challenger_confidence = min(0.9, abs(total_adjustment) + 0.1)
+
+        # ── Verdict: describes what the Challenger found, not whether vuln exists ──
+        # "counter_evidence_found" = Challenger successfully reduced/dismissed ≥1 finding
+        # "no_counter_evidence"    = Challenger tried, couldn't disprove anything
+        if dismissed_count > 0 or reductions:
+            verdict = "counter_evidence_found"
+            status = "SUCCESS"
+        else:
+            verdict = "no_counter_evidence"
+            status = "SUCCESS"
+
+        objection_parts = [f"⚔️ Challenger reviewed {len(confirmed)} findings."]
         if dismissed_count:
-            objection_summary += f"DISMISSED {dismissed_count}. "
-        reductions = [c for c in challenges if c.get("challenge") == "REDUCED"]
+            objection_parts.append(f"DISMISSED {dismissed_count}.")
         if reductions:
-            objection_summary += f"REDUCED {len(reductions)}. "
-        upheld = [c for c in challenges if c.get("challenge") == "UPHELD"]
+            objection_parts.append(f"REDUCED {len(reductions)}.")
         if upheld:
-            objection_summary += f"UPHELD {len(upheld)} (confirmed real)."
+            objection_parts.append(f"UPHELD {len(upheld)} (confirmed real).")
+        objection_summary = " ".join(objection_parts)
 
-        # Store for coordinator
         self.state.challenger_objection = objection_summary
 
         return AgentResult(
             agent=self.name,
-            verdict="confirmed" if dismissed_count > 0 else "rejected",
+            verdict=verdict,
             confidence=challenger_confidence,
             evidence=evidence,
             metadata={
+                "status": status,
                 "challenges_raised": len(challenges),
                 "dismissed": dismissed_count,
                 "reduced": len(reductions),
