@@ -102,7 +102,7 @@ repo_path
 ## Quickstart
 
 ```bash
-git clone https://github.com/yourname/vireon
+git clone https://github.com/anubhavmohandas/vireon
 cd vireon
 
 python -m venv myvenv
