@@ -2,7 +2,7 @@
 agents/static_agent.py — Static Analysis Agent
 
 Security role: Code Analyst
-Internally uses: scanner.semgrep (standalone, no SAGE dependency)
+Internally uses: engine.semgrep (standalone, no SAGE dependency)
 
 Responsibilities:
   1. Run Semgrep on the blast radius of CVE-exposed functions
@@ -34,6 +34,17 @@ class StaticAgent(BandAgent):
         import asyncio
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._run_sync)
+
+    def _rich_detail(self, result: AgentResult) -> str:
+        m = result.metadata
+        hits = m.get("findings_count", 0)
+        files = m.get("unique_files", 0)
+        top = result.evidence[0].get("rule", "") if result.evidence else ""
+        rule_hint = f" | top rule: {top}" if top else ""
+        return (
+            f"Semgrep: {hits} finding(s) across {files} file(s){rule_hint} | "
+            f"conf={result.confidence:.2f} +{result.duration_ms}ms"
+        )
 
     def _run_sync(self) -> AgentResult:
         from engine.semgrep import run_semgrep, normalize_findings

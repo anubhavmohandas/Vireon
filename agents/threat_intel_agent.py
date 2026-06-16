@@ -2,7 +2,7 @@
 agents/threat_intel_agent.py — Threat Intelligence Agent
 
 Security role: Threat Researcher
-Internally uses: scanner.stack, scanner.osv, scanner.nvd, scanner.graph (standalone)
+Internally uses: engine.stack, engine.osv, engine.nvd, engine.graph (standalone)
 
 Responsibilities:
   1. Detect repo stack (languages, packages, versions)

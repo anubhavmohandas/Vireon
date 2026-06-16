@@ -2,7 +2,7 @@
 agents/verification_agent.py — Verification Agent
 
 Security role: QA / Security Verifier
-Internally uses: scanner.verifier (standalone, no SAGE dependency)
+Internally uses: engine.verifier (standalone, no SAGE dependency)
 
 Responsibilities:
   1. Run existing tests against patched code
@@ -36,6 +36,19 @@ class VerificationAgent(BandAgent):
         import asyncio
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._run_sync)
+
+    def _rich_detail(self, result: AgentResult) -> str:
+        m = result.metadata
+        overall = m.get("overall", "?")
+        passed = m.get("tests_passed", 0)
+        failed = m.get("tests_failed", 0)
+        cleared = m.get("vulns_cleared", 0)
+        remaining = m.get("vulns_remaining", 0)
+        return (
+            f"{overall} | tests: {passed} passed {failed} failed | "
+            f"vulns: {cleared} cleared {remaining} remaining | "
+            f"conf={result.confidence:.2f} +{result.duration_ms}ms"
+        )
 
     def _run_sync(self) -> AgentResult:
         from engine.verifier import run_tests, save_test_results, run_verifier, save_verifier_results

@@ -75,6 +75,21 @@ class ChallengerAgent(BandAgent):
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._run_sync)
 
+    def _rich_detail(self, result: AgentResult) -> str:
+        m = result.metadata
+        status = m.get("status", "")
+        if status in ("API_ERROR", "PARSE_ERROR"):
+            return f"⚠ {status}: {m.get('error', '')[:80]} | conf={result.confidence:.2f}"
+        dismissed = m.get("dismissed", 0)
+        reduced = m.get("reduced", 0)
+        upheld = m.get("upheld", 0)
+        adj = m.get("total_confidence_adjustment", 0.0)
+        adj_str = f"{adj:+.2f}" if adj else "±0"
+        return (
+            f"Red team: dismissed={dismissed} reduced={reduced} upheld={upheld} | "
+            f"conf adj={adj_str} | conf={result.confidence:.2f} +{result.duration_ms}ms"
+        )
+
     def _run_sync(self) -> AgentResult:
         confirmed = self.state.confirmed
         reach_results = self.state.reach_results

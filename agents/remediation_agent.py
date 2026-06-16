@@ -2,7 +2,7 @@
 agents/remediation_agent.py — Remediation Agent
 
 Security role: Security Engineer (Fix Generation)
-Internally uses: scanner.patcher (standalone, no SAGE dependency)
+Internally uses: engine.patcher (standalone, no SAGE dependency)
 
 Responsibilities:
   1. Generate patches for confirmed + upheld vulnerabilities
@@ -35,6 +35,16 @@ class RemediationAgent(BandAgent):
         import asyncio
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._run_sync)
+
+    def _rich_detail(self, result: AgentResult) -> str:
+        m = result.metadata
+        patches = m.get("code_patches", 0)
+        bumps = m.get("dep_bumps", 0)
+        attempt = m.get("attempt", 1)
+        return (
+            f"attempt {attempt} | code patches={patches} dep bumps={bumps} | "
+            f"conf={result.confidence:.2f} +{result.duration_ms}ms"
+        )
 
     def _run_sync(self) -> AgentResult:
         from engine.patcher import run_patcher

@@ -38,6 +38,18 @@ class DeliveryAgent(BandAgent):
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._run_sync)
 
+    def _rich_detail(self, result: AgentResult) -> str:
+        m = result.metadata
+        pr_url = m.get("pr_url", "")
+        pr_number = m.get("pr_number", "")
+        skipped = m.get("skipped", False)
+        cves = m.get("cves_addressed", 0)
+        if skipped:
+            return f"draft saved (no GITHUB_TOKEN) | CVEs addressed={cves} | conf={result.confidence:.2f}"
+        if pr_url:
+            return f"PR #{pr_number} opened | CVEs addressed={cves} | {pr_url}"
+        return f"delivery failed | conf={result.confidence:.2f} +{result.duration_ms}ms"
+
     def _run_sync(self) -> AgentResult:
         from engine.github_pr import run_github_pr, save_pr_result
 

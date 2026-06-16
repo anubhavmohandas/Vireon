@@ -61,6 +61,18 @@ class ComplianceAgent(BandAgent):
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._run_sync)
 
+    def _rich_detail(self, result: AgentResult) -> str:
+        m = result.metadata
+        overall = m.get("overall", "?")
+        approved = m.get("approved_count", 0)
+        rejected = m.get("rejected_count", 0)
+        blocking = m.get("blocking_rejections", 0)
+        blocking_str = f" ({blocking} blocking)" if blocking else ""
+        return (
+            f"{overall} | approved={approved} rejected={rejected}{blocking_str} | "
+            f"conf={result.confidence:.2f} +{result.duration_ms}ms"
+        )
+
     def _run_sync(self) -> AgentResult:
         patch_result = self.state.patch_result
         confirmed = self.state.confirmed
