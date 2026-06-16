@@ -21,7 +21,7 @@ Phase 4 — Remediation Loop (up to max_attempts):
 
 Phase 5 — Verification + Delivery:
   VerificationAgent runs tests + final Semgrep
-  PRAgent creates GitHub PR
+  DeliveryAgent creates GitHub PR
 
 The coordinator posts live updates to the Band room throughout.
 """
@@ -37,7 +37,7 @@ from agents.challenger_agent import ChallengerAgent
 from agents.remediation_agent import RemediationAgent
 from agents.compliance_agent import ComplianceAgent
 from agents.verification_agent import VerificationAgent
-from agents.pr_agent import PRAgent
+from agents.delivery_agent import DeliveryAgent
 from config import vcfg
 from coordinator.summary import generate_summary
 
@@ -194,9 +194,9 @@ class Coordinator:
             await self._print_summary()
             return
 
-        print("\n[Phase 5b] GitHub PR\n")
-        pr_agent = self._make_agent(PRAgent, "PR_AGENT_ID", "PR_AGENT_KEY")
-        await pr_agent.run()
+        print("\n[Phase 5b] Delivery (GitHub PR)\n")
+        delivery_agent = self._make_agent(DeliveryAgent, "PR_AGENT_ID", "PR_AGENT_KEY")
+        await delivery_agent.run()
 
         await state.add_event("coordinator", "completed", "Investigation complete — PR raised")
         await self._print_summary()

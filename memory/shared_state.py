@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
 
+from agents.result import AgentResult  # noqa: F401 — re-exported for backward compat
+
 
 def _generate_inv_id() -> str:
     """Generate a unique investigation ID, e.g. INV-2026-04821"""
@@ -30,19 +32,6 @@ class TimelineEvent:
     detail: str = ""
     confidence: Optional[float] = None
     inv_id: str = ""
-
-
-@dataclass
-class AgentResult:
-    """Standard result schema — every agent returns this."""
-    agent: str
-    verdict: str                  # "confirmed" | "rejected" | "inconclusive"
-    confidence: float             # 0.0–1.0
-    evidence: list[dict]          # raw findings
-    metadata: dict[str, Any]      # agent-specific extras (patch path, CVE list, etc.)
-    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
-    duration_ms: int = 0          # wall-clock time for this agent's execute()
-    depends_on: list[str] = field(default_factory=list)  # agent names this result depended on
 
 
 class SharedState:

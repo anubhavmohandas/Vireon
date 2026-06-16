@@ -15,7 +15,8 @@ Runs after ChallengerAgent confirms findings are real.
 import os
 
 from agents.base_agent import BandAgent
-from memory.shared_state import SharedState, AgentResult
+from memory.shared_state import SharedState
+from agents.result import AgentResult
 
 
 class RemediationAgent(BandAgent):
@@ -36,7 +37,7 @@ class RemediationAgent(BandAgent):
         return await loop.run_in_executor(None, self._run_sync)
 
     def _run_sync(self) -> AgentResult:
-        from scanner.patcher import run_patcher
+        from engine.patcher import run_patcher
 
         confirmed = self.state.confirmed
         repo_path = self.state.repo_path

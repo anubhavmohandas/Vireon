@@ -17,7 +17,8 @@ Judges see: patch generated → compliance rejected → patch regenerated → ap
 import os
 
 from agents.base_agent import BandAgent
-from memory.shared_state import SharedState, AgentResult
+from memory.shared_state import SharedState
+from agents.result import AgentResult
 from config import llm_call
 
 

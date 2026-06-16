@@ -27,7 +27,8 @@ _ROOT = os.path.dirname(os.path.abspath(__file__))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from memory.shared_state import SharedState, AgentResult
+from memory.shared_state import SharedState
+from agents.result import AgentResult
 from coordinator.coordinator import Coordinator
 
 

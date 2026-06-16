@@ -17,7 +17,8 @@ Band room will show this as a visible debate between agents.
 import os
 
 from agents.base_agent import BandAgent
-from memory.shared_state import SharedState, AgentResult
+from memory.shared_state import SharedState
+from agents.result import AgentResult
 from config import llm_call
 
 

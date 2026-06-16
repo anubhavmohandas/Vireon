@@ -16,7 +16,8 @@ Requires: state.graph must be populated (ThreatIntelAgent must finish first).
 import os
 
 from agents.base_agent import BandAgent
-from memory.shared_state import SharedState, AgentResult
+from memory.shared_state import SharedState
+from agents.result import AgentResult
 
 
 class StaticAgent(BandAgent):
@@ -35,7 +36,7 @@ class StaticAgent(BandAgent):
         return await loop.run_in_executor(None, self._run_sync)
 
     def _run_sync(self) -> AgentResult:
-        from scanner.semgrep import run_semgrep, normalize_findings
+        from engine.semgrep import run_semgrep, normalize_findings
 
         repo_path = self.state.repo_path
         cves = self.state.cves

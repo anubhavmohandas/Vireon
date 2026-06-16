@@ -18,7 +18,8 @@ import time
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from memory.shared_state import SharedState, AgentResult
+from memory.shared_state import SharedState
+from agents.result import AgentResult
 
 
 class BandAgent(ABC):

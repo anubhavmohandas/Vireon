@@ -17,7 +17,8 @@ This is the widest net — every other agent narrows from here.
 import os
 
 from agents.base_agent import BandAgent
-from memory.shared_state import SharedState, AgentResult
+from memory.shared_state import SharedState
+from agents.result import AgentResult
 
 
 class ThreatIntelAgent(BandAgent):
@@ -42,10 +43,10 @@ class ThreatIntelAgent(BandAgent):
         return result
 
     def _run_sync(self) -> AgentResult:
-        from scanner.stack import detect_stack
-        from scanner.osv import fetch_osv_for_stack
-        from scanner.nvd import fetch_nvd_for_stack
-        from scanner.graph import build_graph
+        from engine.stack import detect_stack
+        from engine.osv import fetch_osv_for_stack
+        from engine.nvd import fetch_nvd_for_stack
+        from engine.graph import build_graph
 
         repo_path = self.state.repo_path
 

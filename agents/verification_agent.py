@@ -16,7 +16,8 @@ This is the closed loop — patch doesn't ship until verification passes.
 import os
 
 from agents.base_agent import BandAgent
-from memory.shared_state import SharedState, AgentResult
+from memory.shared_state import SharedState
+from agents.result import AgentResult
 
 
 class VerificationAgent(BandAgent):
@@ -37,7 +38,7 @@ class VerificationAgent(BandAgent):
         return await loop.run_in_executor(None, self._run_sync)
 
     def _run_sync(self) -> AgentResult:
-        from scanner.verifier import run_tests, save_test_results, run_verifier, save_verifier_results
+        from engine.verifier import run_tests, save_test_results, run_verifier, save_verifier_results
 
         patch_result = self.state.patch_result
         confirmed = self.state.confirmed
