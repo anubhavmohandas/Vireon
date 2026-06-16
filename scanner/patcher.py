@@ -120,7 +120,12 @@ Respond with JSON:
   "lines_changed": [<line numbers modified>]
 }}
 
-Only include the fix. No markdown outside the JSON."""
+Respond in this EXACT format with these exact delimiters:
+<<<EXPLANATION>>>
+One sentence explaining what you changed.
+<<<PATCHED_CODE>>>
+(complete fixed file content here — no markdown, no backticks, just the raw code)
+<<<END>>>"""
 
     try:
         response = client.chat.completions.create(
@@ -129,13 +134,27 @@ Only include the fix. No markdown outside the JSON."""
             messages=[{"role": "user", "content": prompt}],
         )
         raw = response.choices[0].message.content.strip()
-        if "```json" in raw:
-            raw = raw.split("```json")[1].split("```")[0].strip()
-        elif "```" in raw:
-            raw = raw.split("```")[1].split("```")[0].strip()
 
-        result = json.loads(raw)
-        patched_code = result.get("patched_code", "")
+        # Parse delimited format
+        explanation = ""
+        patched_code = ""
+        if "<<<EXPLANATION>>>" in raw and "<<<PATCHED_CODE>>>" in raw and "<<<END>>>" in raw:
+            explanation = raw.split("<<<EXPLANATION>>>")[1].split("<<<PATCHED_CODE>>>")[0].strip()
+            patched_code = raw.split("<<<PATCHED_CODE>>>")[1].split("<<<END>>>")[0].strip()
+        else:
+            # Fallback: try JSON
+            try:
+                snippet = raw
+                if "```json" in snippet:
+                    snippet = snippet.split("```json")[1].split("```")[0].strip()
+                elif "```" in snippet:
+                    snippet = snippet.split("```")[1].split("```")[0].strip()
+                result = json.loads(snippet)
+                patched_code = result.get("patched_code", "")
+                explanation = result.get("explanation", "")
+            except Exception:
+                print(f"[patcher] Could not parse response for {file_path}")
+                return None
 
         if not patched_code:
             return None

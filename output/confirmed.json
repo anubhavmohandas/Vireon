@@ -1,1 +1,38 @@
-[]
+[
+  {
+    "cve_id": "",
+    "check_id": "javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration",
+    "path": "/Users/anubhavmohandas/Documents/Claude/SAGE/Landing/design-canvas.jsx",
+    "line": 285,
+    "vulnerable": true,
+    "confidence": 0.9,
+    "reason": "Setting the target origin to '*' in window.postMessage allows any origin to receive the message, which can lead to information disclosure if sensitive data is included in the message.",
+    "attack_vector": "An attacker can inject a script into a different origin and listen for messages sent with window.postMessage, intercepting any sensitive data.",
+    "cwe": "CWE-601",
+    "severity": "WARNING"
+  },
+  {
+    "cve_id": "",
+    "check_id": "javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration",
+    "path": "/Users/anubhavmohandas/Documents/Claude/SAGE/Landing/design-canvas.jsx",
+    "line": 426,
+    "vulnerable": true,
+    "confidence": 0.9,
+    "reason": "Setting the target origin to '*' in window.postMessage allows any origin to receive the message, which can lead to information disclosure if sensitive data is included in the message.",
+    "attack_vector": "An attacker can inject a script into a different origin and listen for messages sent with window.postMessage, intercepting any sensitive data.",
+    "cwe": "CWE-601",
+    "severity": "WARNING"
+  },
+  {
+    "cve_id": "",
+    "check_id": "javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration",
+    "path": "/Users/anubhavmohandas/Documents/Claude/SAGE/Landing/design-canvas.jsx",
+    "line": 439,
+    "vulnerable": true,
+    "confidence": 0.9,
+    "reason": "Setting the target origin to '*' in window.postMessage allows any origin to receive the message, which can lead to information disclosure if sensitive data is included in the message.",
+    "attack_vector": "An attacker can inject a script into a different origin and listen for messages sent with window.postMessage, intercepting any sensitive data.",
+    "cwe": "CWE-601",
+    "severity": "WARNING"
+  }
+]
