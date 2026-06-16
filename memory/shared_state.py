@@ -17,6 +17,22 @@ from typing import Any, Optional
 from agents.result import AgentResult  # noqa: F401 — re-exported for backward compat
 
 
+# Maps agent name → pipeline phase (1–4)
+# Phase is auto-derived inside log_decision() — callers never pass it.
+# Phase 2 is the only one with retries; round = remediation_attempts there.
+_PHASE_MAP: dict[str, int] = {
+    "coordinator":     1,
+    "threat":          1,
+    "static":          1,
+    "exploitability":  1,
+    "challenger":      1,
+    "remediation":     2,
+    "compliance":      2,
+    "verification":    3,
+    "pr":              4,
+}
+
+
 def _generate_inv_id() -> str:
     """Generate a unique investigation ID, e.g. INV-2026-04821"""
     year = datetime.now().year
@@ -128,11 +144,20 @@ class SharedState:
         """
         Append a structured decision to the audit trail.
 
+        phase and round are auto-derived — callers never pass them:
+          phase  → from _PHASE_MAP (1=evidence/debate, 2=remediation loop,
+                                    3=verification, 4=delivery)
+          round  → remediation_attempts (only meaningful in phase 2;
+                   always 1 for other phases)
+
         Examples:
             await state.log_decision("compliance", "PATCH_REJECTED", "Authentication check removed")
             await state.log_decision("challenger", "FINDING_DISMISSED", "Input sanitized via ORM")
             await state.log_decision("coordinator", "INVESTIGATION_ABORTED", "Fused confidence too low")
         """
+        phase = _PHASE_MAP.get(agent, 1)
+        round_ = self.remediation_attempts if phase == 2 else 1
+
         async with self._lock:
             entry = {
                 "timestamp": datetime.now().isoformat(),
@@ -141,9 +166,11 @@ class SharedState:
                 "action": action,
                 "reason": reason,
                 "metadata": metadata or {},
+                "phase": phase,
+                "round": round_,
             }
             self._decision_log.append(entry)
-            print(f"[DECISION] {agent.upper():20s} {action:30s}  {reason}")
+            print(f"[DECISION] phase={phase} round={round_} {agent.upper():20s} {action:30s}  {reason}")
 
     async def get_decision_log(self) -> list[dict]:
         async with self._lock:
