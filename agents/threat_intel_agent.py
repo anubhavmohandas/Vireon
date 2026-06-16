@@ -116,6 +116,7 @@ class ThreatIntelAgent(BandAgent):
                 "stack_packages":  len(stack),
                 "osv_cves":        len(osv_cves),
                 "nvd_cves":        len(nvd_cves),
+                "cves_fetched":    len(osv_cves) + len(nvd_cves),
                 "cves_relevant":   len(relevant),
                 "reachable_cves":  len(reachable),
                 "graph_nodes":     G.number_of_nodes() if G else 0,

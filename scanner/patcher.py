@@ -113,14 +113,7 @@ Generate a MINIMAL fix that:
 2. Preserves existing functionality
 3. Does not introduce new vulnerabilities
 
-Respond with JSON:
-{{
-  "patched_code": "<complete fixed file content>",
-  "explanation": "<what you changed and why>",
-  "lines_changed": [<line numbers modified>]
-}}
-
-Respond in this EXACT format with these exact delimiters:
+Respond in this EXACT format with these exact delimiters (no other text):
 <<<EXPLANATION>>>
 One sentence explaining what you changed.
 <<<PATCHED_CODE>>>
@@ -178,13 +171,10 @@ One sentence explaining what you changed.
             "patched_file": file_path,
             "diff": diff,
             "patched_code": patched_code,
-            "explanation": result.get("explanation", "")[:500],
-            "lines_changed": result.get("lines_changed", []),
+            "explanation": explanation[:500],
+            "lines_changed": [],
         }
 
-    except json.JSONDecodeError as e:
-        print(f"[patcher] JSON parse error for {file_path}: {e}")
-        return None
     except Exception as e:
         print(f"[patcher] Error patching {file_path}: {e}")
         return None
