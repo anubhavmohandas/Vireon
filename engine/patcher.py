@@ -94,6 +94,26 @@ def _generate_code_patch(
     attack_vector = finding.get("attack_vector", "")
     cwe = finding.get("cwe", "")
 
+    # Build source context: full file if small, targeted window if large.
+    # Sending truncated source then asking for "complete file" produces corrupted patches.
+    lines = source.splitlines(keepends=True)
+    FULL_FILE_CHAR_LIMIT = 8000
+    win_start = 0
+    win_end = len(lines)
+    if len(source) <= FULL_FILE_CHAR_LIMIT:
+        source_block = source
+        patch_instruction = "(complete fixed file content here — no markdown, no backticks, just the raw code)"
+    else:
+        # Window: ±60 lines around the vulnerable line
+        ctx = 60
+        win_start = max(0, line - ctx - 1)
+        win_end = min(len(lines), line + ctx)
+        source_block = "".join(lines[win_start:win_end])
+        patch_instruction = (
+            f"(patched version of ONLY the shown window — lines {win_start+1}–{win_end}. "
+            f"No markdown, no backticks, just raw code. Do NOT include lines outside the window.)"
+        )
+
     prompt = f"""You are a security engineer. Fix the vulnerability in this code.
 
 FILE: {file_path}
@@ -105,7 +125,7 @@ ATTACK VECTOR: {attack_vector}
 
 SOURCE CODE:
 ```python
-{source[:3000]}
+{source_block}
 ```
 
 Generate a MINIMAL fix that:
@@ -117,7 +137,7 @@ Respond in this EXACT format with these exact delimiters (no other text):
 <<<EXPLANATION>>>
 One sentence explaining what you changed.
 <<<PATCHED_CODE>>>
-(complete fixed file content here — no markdown, no backticks, just the raw code)
+{patch_instruction}
 <<<END>>>"""
 
     try:
@@ -152,13 +172,23 @@ One sentence explaining what you changed.
         if not patched_code:
             return None
 
-        # Generate unified diff
-        original_lines = source.splitlines(keepends=True)
-        patched_lines = patched_code.splitlines(keepends=True)
+        # For windowed edits: reassemble the full file so patched_code is always
+        # the complete file content (not just the window).
+        if win_start > 0 or win_end < len(lines):
+            pre = "".join(lines[:win_start])
+            post = "".join(lines[win_end:])
+            full_patched = pre + patched_code + post
+            original_for_diff = source_block.splitlines(keepends=True)
+            patched_for_diff = patched_code.splitlines(keepends=True)
+        else:
+            full_patched = patched_code
+            original_for_diff = source.splitlines(keepends=True)
+            patched_for_diff = patched_code.splitlines(keepends=True)
+
         diff = "".join(
             difflib.unified_diff(
-                original_lines,
-                patched_lines,
+                original_for_diff,
+                patched_for_diff,
                 fromfile=f"a/{file_path}",
                 tofile=f"b/{file_path}",
                 lineterm="",
@@ -170,7 +200,7 @@ One sentence explaining what you changed.
             "check_id": check_id,
             "patched_file": file_path,
             "diff": diff,
-            "patched_code": patched_code,
+            "patched_code": full_patched,
             "explanation": explanation[:500],
             "lines_changed": [],
         }

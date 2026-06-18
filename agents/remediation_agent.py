@@ -63,12 +63,13 @@ class RemediationAgent(BandAgent):
             )
 
         # Get all CVEs from graph for dep bump
+        # Graph nodes are keyed by raw CVE ID (e.g. "CVE-2024-1234"), not "cve:..."
         all_cves = []
         if G is not None:
             seen = set()
             for node, data in G.nodes(data=True):
-                if node.startswith("cve:"):
-                    cve_id = data.get("cve_id", node.replace("cve:", ""))
+                if data.get("type") == "cve":
+                    cve_id = data.get("cve_id", node)
                     if cve_id not in seen:
                         seen.add(cve_id)
                         all_cves.append({

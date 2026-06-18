@@ -49,6 +49,7 @@ Be strict — a rejected patch goes back to the Remediation Agent for a retry.
 
 class ComplianceAgent(BandAgent):
     name = "compliance"
+    depends_on = ["remediation"]
     system_prompt = (
         "You are Vireon's Compliance Agent. You review security patches before they are applied. "
         "You check for security regressions, broken authentication, incomplete fixes, "

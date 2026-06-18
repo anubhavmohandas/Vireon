@@ -24,6 +24,7 @@ from agents.result import AgentResult
 
 class DeliveryAgent(BandAgent):
     name = "pr"
+    depends_on = ["verification"]
     system_prompt = (
         "You are Vireon's Delivery Agent. "
         "After a patch is verified, you create a GitHub pull request. "
@@ -73,8 +74,8 @@ class DeliveryAgent(BandAgent):
         if G is not None:
             seen = set()
             for node, data in G.nodes(data=True):
-                if node.startswith("cve:"):
-                    cve_id = data.get("cve_id", node.replace("cve:", ""))
+                if data.get("type") == "cve":
+                    cve_id = data.get("cve_id", node)
                     if cve_id not in seen:
                         seen.add(cve_id)
                         all_cves.append({

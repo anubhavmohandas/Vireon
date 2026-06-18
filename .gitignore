@@ -8,6 +8,7 @@ __pycache__/
 .venv/
 venv/
 env/
+myvenv/
 
 # Data directories (SAGE outputs — can be large)
 data/
@@ -25,3 +26,5 @@ Thumbs.db
 dist/
 build/
 *.egg-info/
+
+Audit.md
