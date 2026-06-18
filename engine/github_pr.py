@@ -55,7 +55,7 @@ def run_github_pr(
     try:
         import requests
 
-        branch_name = _create_branch_and_push(patch_result, repo, token, repo_path)
+        branch_name, default_branch = _create_branch_and_push(patch_result, repo, token, repo_path)
         if not branch_name:
             return {
                 "url": "", "number": 0, "skipped": True,
@@ -79,7 +79,7 @@ def run_github_pr(
                 "title": title,
                 "body": pr_body,
                 "head": branch_name,
-                "base": "main",
+                "base": default_branch,
             },
             timeout=30,
         )
@@ -214,10 +214,45 @@ def _build_pr_body(
 """
 
 
-def _create_branch_and_push(patch_result: dict, repo: str, token: str, repo_path: str) -> str | None:
+def _get_default_branch(repo_path: str) -> str:
+    """
+    Read the actual default branch from the remote tracking ref.
+    Falls back to 'main' if the ref is absent (e.g. shallow clone with no remote).
+    """
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["git", "symbolic-ref", "refs/remotes/origin/HEAD"],
+            cwd=repo_path, capture_output=True, text=True,
+        )
+        if result.returncode == 0:
+            # e.g. "refs/remotes/origin/main\n" → "main"
+            ref = result.stdout.strip()
+            return ref.split("/")[-1] if ref else "main"
+    except Exception:
+        pass
+
+    # Fallback: try to read HEAD branch name from remote via ls-remote
+    try:
+        result = subprocess.run(
+            ["git", "remote", "show", "origin"],
+            cwd=repo_path, capture_output=True, text=True, timeout=10,
+        )
+        for line in result.stdout.splitlines():
+            if "HEAD branch:" in line:
+                return line.split("HEAD branch:")[-1].strip()
+    except Exception:
+        pass
+
+    print("[github_pr] Could not determine default branch — falling back to 'main'")
+    return "main"
+
+
+def _create_branch_and_push(patch_result: dict, repo: str, token: str, repo_path: str) -> tuple[str | None, str]:
     """
     Create a git branch, apply patches, and push.
-    Returns branch name or None on failure.
+    Returns (branch_name, default_branch) or (None, default_branch) on failure.
     """
     import subprocess
 
@@ -225,12 +260,16 @@ def _create_branch_and_push(patch_result: dict, repo: str, token: str, repo_path
     branch_name = f"vireon/security-fix-{timestamp}"
 
     patches = patch_result.get("patches", []) if isinstance(patch_result, dict) else []
+    default_branch = _get_default_branch(repo_path)
+
+    # Collect the set of files we will actually write so we stage only those.
+    patched_files: list[str] = []
 
     try:
         # Create branch
         subprocess.run(["git", "checkout", "-b", branch_name], cwd=repo_path, check=True, capture_output=True)
 
-        # Apply patches
+        # Apply patches and record which absolute paths were written
         for patch in patches:
             file_path = patch.get("patched_file", "")
             patched_code = patch.get("patched_code", "")
@@ -240,11 +279,20 @@ def _create_branch_and_push(patch_result: dict, repo: str, token: str, repo_path
             try:
                 with open(full_path, "w") as f:
                     f.write(patched_code)
+                # Store repo-relative path for `git add`
+                rel_path = os.path.relpath(full_path, repo_path)
+                patched_files.append(rel_path)
             except Exception as e:
                 print(f"[github_pr] Failed to write patch for {file_path}: {e}")
 
-        # Stage and commit
-        subprocess.run(["git", "add", "-A"], cwd=repo_path, check=True, capture_output=True)
+        if not patched_files:
+            print("[github_pr] No files written — nothing to commit")
+            subprocess.run(["git", "checkout", default_branch], cwd=repo_path, capture_output=True)
+            return None, default_branch
+
+        # Stage ONLY the patched files — never `git add -A`
+        subprocess.run(["git", "add", "--"] + patched_files, cwd=repo_path, check=True, capture_output=True)
+
         subprocess.run(
             ["git", "commit", "-m", f"[Vireon] Automated security patch ({timestamp})"],
             cwd=repo_path, check=True, capture_output=True,
@@ -257,16 +305,17 @@ def _create_branch_and_push(patch_result: dict, repo: str, token: str, repo_path
             cwd=repo_path, check=True, capture_output=True,
         )
 
-        return branch_name
+        return branch_name, default_branch
 
     except subprocess.CalledProcessError as e:
-        print(f"[github_pr] Git error: {e.stderr}")
-        # Try to restore branch
+        stderr = e.stderr.decode() if isinstance(e.stderr, bytes) else (e.stderr or "")
+        print(f"[github_pr] Git error: {stderr}")
+        # Restore to default branch (not hardcoded 'main')
         try:
-            subprocess.run(["git", "checkout", "main"], cwd=repo_path, capture_output=True)
+            subprocess.run(["git", "checkout", default_branch], cwd=repo_path, capture_output=True)
         except Exception:
             pass
-        return None
+        return None, default_branch
 
 
 def _save_pr_draft(pr_body: str, out_dir: str = _OUT_DIR) -> str:

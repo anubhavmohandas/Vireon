@@ -99,8 +99,14 @@ def save_test_results(results: dict, out_dir: str = _OUT_DIR) -> str:
 
 def run_verifier(patch_result: dict, confirmed: list[dict], repo_path: str) -> dict:
     """
-    Apply patches to a temp copy of the repo and re-run Semgrep.
+    Apply patches to a temp copy of the repo and re-run Semgrep on the patched files.
     Confirms the vulnerability pattern is gone after patching.
+
+    Rule IDs are sourced from ``confirmed`` (which always carries check_id from
+    llm_analyzer) rather than ``patches``, because patches do not reliably
+    propagate check_id.  Each confirmed finding is matched against remaining
+    Semgrep hits by (check_id, normalized_path) so clearing is per-finding, not
+    per-patch.
 
     Returns:
         {vulnerabilities_cleared, vulnerabilities_remaining, details}
@@ -115,12 +121,24 @@ def run_verifier(patch_result: dict, confirmed: list[dict], repo_path: str) -> d
             "skipped": True,
         }
 
+    # Build the authoritative set of (check_id, path) pairs from confirmed findings.
+    # These are what we need to verify are gone — NOT the patch list.
+    exploitable_confirmed = [c for c in (confirmed or []) if c.get("vulnerable") and c.get("check_id")]
+    confirmed_pairs: set[tuple[str, str]] = {
+        (c["check_id"], os.path.normpath(c.get("path", "")))
+        for c in exploitable_confirmed
+    }
+
+    # Also collect a flat set of rule IDs as fallback
+    rule_ids: set[str] = {pair[0] for pair in confirmed_pairs}
+
     # Check semgrep availability
     if not _semgrep_available():
         print("[verifier] semgrep not installed — skipping re-verification")
+        # Cannot claim anything cleared without actually scanning
         return {
-            "vulnerabilities_cleared": len(patches),  # optimistic
-            "vulnerabilities_remaining": 0,
+            "vulnerabilities_cleared": 0,
+            "vulnerabilities_remaining": len(confirmed_pairs) or len(patches),
             "details": [],
             "skipped": True,
             "reason": "semgrep not installed",
@@ -131,13 +149,19 @@ def run_verifier(patch_result: dict, confirmed: list[dict], repo_path: str) -> d
         shutil.copytree(repo_path, tmp_dir, dirs_exist_ok=True)
         _apply_patches(patches, tmp_dir)
 
-        # Collect rule IDs we're checking
-        rule_ids = {p.get("check_id", "") for p in patches if p.get("check_id")}
+        # Re-run Semgrep on only the patched files for speed; fall back to full dir.
+        patched_files_abs = []
+        for patch in patches:
+            rel = patch.get("patched_file", "")
+            if rel:
+                abs_path = rel if os.path.isabs(rel) else os.path.join(tmp_dir, rel)
+                if os.path.exists(abs_path):
+                    patched_files_abs.append(abs_path)
+        scan_targets = patched_files_abs if patched_files_abs else [tmp_dir]
 
-        # Re-run Semgrep
         from engine.semgrep import _semgrep_bin
         result = subprocess.run(
-            [_semgrep_bin(), "--config", "p/owasp-top-ten", "--json", "--quiet", tmp_dir],
+            [_semgrep_bin(), "--config", "p/owasp-top-ten", "--json", "--quiet"] + scan_targets,
             capture_output=True, text=True, timeout=120,
         )
 
@@ -149,26 +173,54 @@ def run_verifier(patch_result: dict, confirmed: list[dict], repo_path: str) -> d
             except json.JSONDecodeError:
                 pass
 
-        # Count: how many of our patched rules still fire?
-        still_vulnerable = [
-            f for f in remaining_findings
-            if f.get("check_id", "") in rule_ids
-        ]
+        # Normalise paths in re-scan results to be relative to tmp_dir so they
+        # match the relative paths in confirmed findings.
+        def _rel_to_tmp(p: str) -> str:
+            try:
+                return os.path.normpath(os.path.relpath(p, tmp_dir))
+            except ValueError:
+                return os.path.normpath(p)
 
-        cleared = len(patches) - len(still_vulnerable)
-        details = [
-            {
-                "check_id": f.get("check_id"),
-                "path": f.get("path"),
-                "line": f.get("start", {}).get("line"),
-                "status": "still_vulnerable",
-            }
-            for f in still_vulnerable
-        ]
+        # Build set of (check_id, rel_path) still firing after patch
+        still_firing: set[tuple[str, str]] = {
+            (f.get("check_id", ""), _rel_to_tmp(f.get("path", "")))
+            for f in remaining_findings
+            if f.get("check_id", "") in rule_ids
+        }
+
+        if confirmed_pairs:
+            # Per-finding verdict: only count a finding as cleared if its exact
+            # (check_id, path) pair is no longer in still_firing.
+            still_vulnerable_pairs = confirmed_pairs & still_firing
+            cleared_pairs = confirmed_pairs - still_firing
+            cleared = len(cleared_pairs)
+            remaining_count = len(still_vulnerable_pairs)
+            details = [
+                {"check_id": cid, "path": p, "status": "still_vulnerable"}
+                for cid, p in still_vulnerable_pairs
+            ]
+        else:
+            # No confirmed exploitable findings to track — fall back to rule-ID
+            # count across all remaining findings (less precise but not falsely optimistic).
+            still_vulnerable = [
+                f for f in remaining_findings
+                if f.get("check_id", "") in rule_ids
+            ] if rule_ids else remaining_findings
+            cleared = max(0, len(patches) - len(still_vulnerable))
+            remaining_count = len(still_vulnerable)
+            details = [
+                {
+                    "check_id": f.get("check_id"),
+                    "path": f.get("path"),
+                    "line": f.get("start", {}).get("line"),
+                    "status": "still_vulnerable",
+                }
+                for f in still_vulnerable
+            ]
 
         return {
-            "vulnerabilities_cleared": max(0, cleared),
-            "vulnerabilities_remaining": len(still_vulnerable),
+            "vulnerabilities_cleared": cleared,
+            "vulnerabilities_remaining": remaining_count,
             "details": details,
             "skipped": False,
         }

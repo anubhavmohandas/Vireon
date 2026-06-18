@@ -77,9 +77,10 @@ def _normalize(cve: dict, pkg_name: str, pkg_version: str) -> dict | None:
             desc = d.get("value", "")[:300]
             break
 
-    # Severity
+    # Severity + attack vector
     severity = "UNKNOWN"
     cvss_score = 0.0
+    attack_vector = "UNKNOWN"
     metrics = cve.get("metrics", {})
     for key in ["cvssMetricV31", "cvssMetricV30", "cvssMetricV2"]:
         if key in metrics and metrics[key]:
@@ -87,6 +88,11 @@ def _normalize(cve: dict, pkg_name: str, pkg_version: str) -> dict | None:
                 data = metrics[key][0]["cvssData"]
                 severity = data.get("baseSeverity", "UNKNOWN")
                 cvss_score = float(data.get("baseScore", 0))
+                # CVSSv3.x uses "attackVector"; CVSSv2 uses "accessVector"
+                av_raw = data.get("attackVector") or data.get("accessVector", "")
+                if av_raw:
+                    # Normalise CVSSv2 ADJACENT_NETWORK → ADJACENT
+                    attack_vector = av_raw.replace("_NETWORK", "").upper()
                 break
             except (KeyError, IndexError, TypeError):
                 pass
@@ -99,7 +105,7 @@ def _normalize(cve: dict, pkg_name: str, pkg_version: str) -> dict | None:
             "severity":          severity,
             "cvss_score":        cvss_score,
             "description":       desc,
-            "attack_vector":     "NETWORK",
+            "attack_vector":     attack_vector,
             "source":            "NVD",
         },
     }

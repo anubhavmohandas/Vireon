@@ -91,16 +91,51 @@ class ThreatIntelAgent(BandAgent):
         G = build_graph(repo_path, stack, relevant)
         self.state.graph = G
 
-        # Step 4: Reachability — mark CVEs with network attack vector as reachable
+        # Step 4: Reachability — combine attack_vector with graph connectivity.
+        # A CVE is reachable only if:
+        #   (a) its attack_vector is NETWORK or ADJACENT (not LOCAL / PHYSICAL / UNKNOWN), AND
+        #   (b) the vulnerable package is actually present in the dependency graph
+        #       (reachable from the "repo" root via BFS).
+        #
+        # Using the graph avoids inflating reachability for packages that appear
+        # in the NVD/OSV response but are not in this repo's actual dependency tree.
+        try:
+            import networkx as nx
+            _graph_available = True
+        except ImportError:
+            _graph_available = False
+
+        def _in_graph(pkg: str) -> bool:
+            """Return True if pkg node exists and is connected to 'repo'."""
+            if not _graph_available or G is None:
+                return True  # can't prove absence — assume present
+            if pkg not in G:
+                return False
+            if "repo" not in G:
+                return pkg in G  # no repo node — just check existence
+            try:
+                return nx.has_path(G.to_undirected(), "repo", pkg)
+            except (nx.NetworkXError, nx.exception.NodeNotFound):
+                return pkg in G
+
+        NETWORK_VECTORS = {"NETWORK", "ADJACENT"}
+
         reach_dict = {}
         for cve in relevant:
             m = cve.get("sage_match", {})
             cve_id = m.get("cve_id", "")
+            pkg = m.get("package", "")
+            av = m.get("attack_vector", "UNKNOWN")
+            vector_reachable = av in NETWORK_VECTORS
+            graph_reachable = _in_graph(pkg)
+            reachable = vector_reachable and graph_reachable
             reach_dict[cve_id] = {
-                "cve_id":    cve_id,
-                "package":   m.get("package", ""),
-                "reachable": m.get("attack_vector", "NETWORK") in ("NETWORK", "ADJACENT"),
-                "paths":     [{"entry": "external", "path": ["external", m.get("package", "")], "depth": 1}],
+                "cve_id":           cve_id,
+                "package":          pkg,
+                "reachable":        reachable,
+                "attack_vector":    av,
+                "in_dep_graph":     graph_reachable,
+                "paths": [{"entry": "external", "path": ["external", pkg], "depth": 1}] if reachable else [],
             }
         self.state.reach_results = reach_dict
 

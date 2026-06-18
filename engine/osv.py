@@ -148,15 +148,33 @@ def _normalize(vuln: dict, pkg_name: str, pkg_version: str) -> dict | None:
         except (TypeError, ValueError):
             pass
 
-    # Also check severity array
+    # Also check severity array — extract attack_vector from CVSS vector string
+    attack_vector = "UNKNOWN"
     for sev in vuln.get("severity", []):
-        if sev.get("type") in ("CVSS_V3", "CVSS_V4"):
+        if sev.get("type") in ("CVSS_V3", "CVSS_V4", "CVSS_V2"):
             try:
                 score_str = sev.get("score", "")
-                # CVSS vector — extract AV component for attack_vector
-                pass
+                # CVSS vector string e.g. "CVSS:3.1/AV:N/AC:L/..."
+                # AV values: N=NETWORK, A=ADJACENT, L=LOCAL, P=PHYSICAL
+                av_map = {"N": "NETWORK", "A": "ADJACENT", "L": "LOCAL", "P": "PHYSICAL"}
+                for part in score_str.split("/"):
+                    if part.startswith("AV:"):
+                        attack_vector = av_map.get(part[3:], part[3:])
+                        break
+                # Also try to extract CVSS score from vector if not already set
+                if cvss_score == 0.0:
+                    import re as _re
+                    m = _re.search(r"(\d+\.\d+)", score_str)
+                    if m:
+                        try:
+                            cvss_score = float(m.group(1))
+                            severity = _score_to_severity(cvss_score)
+                        except ValueError:
+                            pass
             except Exception:
                 pass
+        if attack_vector != "UNKNOWN":
+            break
 
     # Extract fixed version
     fixed_version = ""
@@ -178,7 +196,7 @@ def _normalize(vuln: dict, pkg_name: str, pkg_version: str) -> dict | None:
             "severity":          severity,
             "cvss_score":        cvss_score,
             "description":       summary,
-            "attack_vector":     "NETWORK",
+            "attack_vector":     attack_vector,
             "source":            "OSV",
         },
     }
