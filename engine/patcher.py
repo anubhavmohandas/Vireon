@@ -284,7 +284,8 @@ Respond with JSON array:
         return json.loads(raw)
 
     except Exception as e:
-        print(f"[patcher] Dep bump LLM error: {e}")
+        if os.getenv("VIREON_VERBOSE") == "1":
+            print(f"[patcher] Dep bump LLM error: {e}")
         return _simple_dep_bumps(all_cves)
 
 

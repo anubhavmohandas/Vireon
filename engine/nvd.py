@@ -58,7 +58,8 @@ def fetch_nvd_for_stack(stack: dict[str, str], days: int = 90) -> list[dict]:
                     results.append(entry)
 
         except Exception as e:
-            print(f"[nvd] Error fetching {pkg}: {e}")
+            if os.getenv("VIREON_VERBOSE") == "1":
+                print(f"[nvd] Error fetching {pkg}: {e}")
             continue
 
     print(f"[nvd] {len(results)} additional CVEs from NVD keyword search")

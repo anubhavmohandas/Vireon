@@ -58,23 +58,19 @@ class BandAgent(ABC):
         Package: band-sdk[anthropic]  (import namespace: `band`, not `thenvoi`)
         """
         if not self.agent_id or not self.api_key:
-            print(f"[{self.name}] Band credentials not set — running in local mode")
-            return
+            return  # local mode — silent
 
         room_id = os.getenv("BAND_ROOM_ID", "")
         if not room_id:
-            print(f"[{self.name}] BAND_ROOM_ID not set — Band posting disabled")
-            return
+            return  # Band posting disabled — silent
 
         try:
-            # Verify the SDK is importable (catches missing install early)
             from band import Agent  # noqa: F401
             self._band_agent = True  # sentinel — means "credentials OK, use REST"
-            print(f"[{self.name}] Band ready (REST mode) ✓")
         except ImportError:
-            print(f"[{self.name}] band-sdk not installed — run: pip install 'band-sdk[anthropic]'")
-        except Exception as e:
-            print(f"[{self.name}] Band init failed: {e} — continuing in local mode")
+            pass  # band-sdk not installed — continue in local mode
+        except Exception:
+            pass  # Band init failed — continue in local mode
 
     async def _disconnect_band(self):
         """No persistent connection to tear down (REST-only mode)."""
@@ -89,8 +85,6 @@ class BandAgent(ABC):
 
         Always prints locally too so the terminal log stays complete.
         """
-        print(f"[{self.name}→Band] {message}")
-
         room_id = os.getenv("BAND_ROOM_ID", "")
         if not room_id or not self.api_key or not self._band_agent:
             return  # No room configured or Band not initialised — local mode only

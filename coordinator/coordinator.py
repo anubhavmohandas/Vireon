@@ -5,7 +5,6 @@ Orchestrates the full investigation:
 
 Phase 1 — Parallel Evidence Gathering:
   ThreatIntelAgent + StaticAgent run concurrently
-  (ThreatIntelAgent must complete before StaticAgent can use the graph)
 
 Phase 2 — Exploitability Review:
   ExploitabilityAgent confirms which findings are real
@@ -22,12 +21,16 @@ Phase 4 — Remediation Loop (up to max_attempts):
 Phase 5 — Verification + Delivery:
   VerificationAgent runs tests + final Semgrep
   DeliveryAgent creates GitHub PR
-
-The coordinator posts live updates to the Band room throughout.
 """
 
 import asyncio
 from datetime import datetime
+from pathlib import Path
+
+from rich.console import Console
+from rich.panel import Panel
+from rich.rule import Rule
+from rich.text import Text
 
 from memory.shared_state import SharedState
 from agents.threat_intel_agent import ThreatIntelAgent
@@ -40,6 +43,44 @@ from agents.verification_agent import VerificationAgent
 from agents.delivery_agent import DeliveryAgent
 from config import vcfg, CONFIDENCE_THRESHOLD, CHALLENGER_VETO_THRESHOLD
 from coordinator.summary import generate_summary
+
+_con = Console()
+
+
+_PHASE_COLORS = ["", "cyan", "magenta", "yellow", "green", "blue"]
+
+
+def _phase(n: int, title: str, note: str = ""):
+    color = _PHASE_COLORS[n] if n < len(_PHASE_COLORS) else "cyan"
+    suffix = f"  [dim]{note}[/dim]" if note else ""
+    _con.print()
+    _con.print()
+    _con.rule(
+        f"[bold {color}] ❯ Phase {n}[/bold {color}]  [bold white]{title}[/bold white]{suffix}",
+        style=color,
+    )
+    _con.print()
+
+
+def _agent_row(label: str, result, attempt: int = 0):
+    """Print one clean line per agent result."""
+    verdict = result.verdict
+    conf = int(result.confidence * 100)
+    secs = (result.duration_ms or 0) / 1000
+
+    if verdict in ("confirmed", "approved", "no_counter_evidence"):
+        icon, color = "✓", "green"
+    elif verdict in ("rejected",):
+        icon, color = "✗", "red"
+    else:
+        icon, color = "~", "yellow"
+
+    att = f"  [dim]attempt {attempt}[/dim]" if attempt else ""
+    _con.print(
+        f"  [{color}]{icon}[/{color}]  [bold]{label:<28}[/bold]"
+        f"  [{color}]{conf}%[/{color}] conf"
+        f"  [dim]{secs:.0f}s[/dim]{att}"
+    )
 
 
 class Coordinator:
@@ -70,26 +111,25 @@ class Coordinator:
         if self._db:
             await self._db.insert_investigation(state.inv_id, self.repo_path, self.days)
 
-        print("\n" + "═" * 60)
-        print("  VIREON — Autonomous Security Investigation Platform")
-        print(f"  Investigation: {state.inv_id}")
-        print(f"  Repo:          {self.repo_path}")
-        print(f"  Started:       {self.start_time.strftime('%H:%M:%S')}")
-        print("═" * 60 + "\n")
-
+        # ── Header ────────────────────────────────────────────────────────────────
         display_repo = getattr(state, "original_repo_path", None) or self.repo_path
-        await state.add_event("coordinator", "started", f"[{state.inv_id}] repo={display_repo}")
-        print(f"  Investigation ID: {state.inv_id}\n")
+        _con.print()
+        _con.print(Panel(
+            f"[bold white]⚡ VIREON[/bold white]  [dim]·[/dim]  [cyan]{state.inv_id}[/cyan]\n"
+            f"[dim]{display_repo}[/dim]  [dim]·[/dim]  [dim]{self.days}-day CVE window[/dim]"
+            f"  [dim]·  {self.start_time.strftime('%H:%M:%S')}[/dim]",
+            border_style="bright_magenta",
+            padding=(0, 2),
+        ))
 
-        # ── Phase 1: ThreatIntel + Static run in parallel ─────────────────────
-        # StaticAgent (Semgrep) is independent — only needs repo_path.
-        # ThreatIntel builds the graph + CVEs concurrently.
-        # return_exceptions=True so one crash doesn't silently discard the other's result.
-        print("\n[Phase 1] Threat Intelligence + Static Analysis (parallel)\n")
+        await state.add_event("coordinator", "started", f"[{state.inv_id}] repo={display_repo}")
+
+        # ── Phase 1: ThreatIntel + Static (parallel) ──────────────────────────────
+        _phase(1, "Threat Intelligence + Static Analysis", "parallel")
+        _con.print("  [dim]Running in parallel — threat intel may take 1–2 min...[/dim]\n")
+
         threat_agent = self._make_agent(
-            ThreatIntelAgent,
-            "THREAT_AGENT_ID", "THREAT_AGENT_KEY",
-            days=self.days,
+            ThreatIntelAgent, "THREAT_AGENT_ID", "THREAT_AGENT_KEY", days=self.days,
         )
         static_agent = self._make_agent(StaticAgent, "STATIC_AGENT_ID", "STATIC_AGENT_KEY")
 
@@ -100,126 +140,130 @@ class Coordinator:
         )
         threat_exc, static_exc = phase1_results
 
-        # ── Partial failure semantics ──────────────────────────────────────────
-        # ThreatIntel failure = hard abort (no graph → nothing to reason about).
-        # Static failure = soft degraded mode (log it, continue without Semgrep findings).
+        # Show results
+        static_result = await state.get_result("static")
+        threat_result = await state.get_result("threat")
+
+        if static_result:
+            _agent_row("Semgrep Static", static_result)
+        if isinstance(static_exc, Exception):
+            _con.print(f"  [yellow]~[/yellow]  [bold]{'Static Analysis':<28}[/bold]  [dim]failed — degraded mode[/dim]")
+            await state.add_event("coordinator", "degraded",
+                detail=f"StaticAgent failed: {static_exc} — continuing without Semgrep findings")
+            await state.log_decision("coordinator", "STATIC_SKIPPED",
+                reason=f"StaticAgent exception: {str(static_exc)[:200]}")
+
         if isinstance(threat_exc, Exception):
-            await state.add_event(
-                "coordinator", "aborted",
-                detail=f"ThreatIntel failed: {threat_exc}",
-            )
-            await state.log_decision(
-                "coordinator", "PHASE1_ABORT",
-                reason=f"ThreatIntel exception: {str(threat_exc)[:200]}",
-            )
-            print(f"\n[Vireon] ThreatIntel failed — cannot proceed: {threat_exc}")
+            _con.print(f"\n  [red]✗  ThreatIntel failed — cannot proceed:[/red] {threat_exc}")
+            await state.add_event("coordinator", "aborted",
+                detail=f"ThreatIntel failed: {threat_exc}")
+            await state.log_decision("coordinator", "PHASE1_ABORT",
+                reason=f"ThreatIntel exception: {str(threat_exc)[:200]}")
             await self._print_summary()
             return
 
-        if isinstance(static_exc, Exception):
-            await state.add_event(
-                "coordinator", "degraded",
-                detail=f"StaticAgent failed: {static_exc} — continuing without Semgrep findings",
-            )
-            await state.log_decision(
-                "coordinator", "STATIC_SKIPPED",
-                reason=f"StaticAgent exception: {str(static_exc)[:200]}",
-            )
-            print(f"\n[Vireon] ⚠ StaticAgent failed ({static_exc}) — proceeding in degraded mode (CVE-only analysis)")
+        if threat_result:
+            _agent_row("NVD Threat Intel", threat_result)
+
+        # Evidence summary line
+        cves_n = threat_result.metadata.get("cves_fetched", 0) if threat_result else 0
+        findings_n = static_result.metadata.get("findings_count", 0) if static_result else 0
+        _con.print()
+        _con.print(f"  [bold cyan]{cves_n}[/bold cyan] [dim]CVEs fetched[/dim]   [bold cyan]{findings_n}[/bold cyan] [dim]Semgrep findings[/dim]")
+
+        await state.add_event("coordinator", "evidence_gathered",
+            detail=f"threat+static complete | findings={len(state.findings)} CVEs={len(state.cves)}")
 
         if not state.graph:
+            _con.print("\n  [red]No knowledge graph built — is this a Python project with requirements.txt?[/red]")
             await state.add_event("coordinator", "aborted", "No knowledge graph — cannot proceed")
-            print("\n[Vireon] No graph built — is the repo path correct and does it have dependencies?")
             await self._print_summary()
             return
-
-        await state.add_event(
-            "coordinator", "evidence_gathered",
-            detail=f"threat+static complete | findings={len(state.findings)} CVEs={len(state.cves)}",
-        )
 
         if not state.findings:
+            _con.print("\n  [green]✓  No Semgrep findings — repo looks clean for this CVE window.[/green]")
             await state.add_event("coordinator", "completed", "No findings — repo appears clean")
-            print("\n[Vireon] No Semgrep findings. Repo looks clean for this CVE window.")
             await self._print_summary()
             return
 
-        # ── Phase 2: Exploitability ───────────────────────────────────────────
-        print("\n[Phase 2] Exploitability Review\n")
+        # ── Phase 2: Exploitability ───────────────────────────────────────────────
+        _phase(2, "Exploitability Review")
+
         exploit_agent = self._make_agent(
             ExploitabilityAgent, "EXPLOITABILITY_AGENT_ID", "EXPLOITABILITY_AGENT_KEY"
         )
         await exploit_agent.run()
 
+        exploit_result = await state.get_result("exploitability")
+        if exploit_result:
+            _agent_row("Exploitability", exploit_result)
+            confirmed_n = exploit_result.metadata.get("confirmed_count", 0)
+            total_n = exploit_result.metadata.get("total_findings", len(state.findings))
+            _con.print(f"  [bold magenta]{confirmed_n}[/bold magenta] [dim]of[/dim] [bold magenta]{total_n}[/bold magenta] [dim]findings confirmed exploitable[/dim]")
+
         if not state.confirmed:
+            _con.print("\n  [yellow]No exploitable findings confirmed — stopping.[/yellow]")
             await state.add_event("coordinator", "completed", "No exploitable findings confirmed")
-            print("\n[Vireon] Static findings exist but none confirmed exploitable.")
             await self._print_summary()
             return
 
-        # ── Phase 3: Challenger Debate ────────────────────────────────────────
-        print("\n[Phase 3] Challenger Debate\n")
+        # ── Phase 3: Challenger ───────────────────────────────────────────────────
+        _phase(3, "Challenger Debate")
+
         challenger = self._make_agent(
             ChallengerAgent, "CHALLENGER_AGENT_ID", "CHALLENGER_AGENT_KEY"
         )
         await challenger.run()
 
-        # Confidence fusion
-        fused = await state.fused_confidence()
-        await state.add_event(
-            "coordinator", "confidence_fusion",
-            detail=f"fused_confidence={fused:.2f}",
-            confidence=fused,
-        )
-        print(f"\n[Coordinator] Fused confidence: {fused:.2f}")
-
-        # ── Challenger veto check (enterprise mode) ────────────────────────────
-        # Disabled by default (CHALLENGER_VETO_THRESHOLD=1.0).
-        # When enabled: if Challenger found strong counter evidence above the threshold,
-        # escalate rather than proceeding — forces re-analysis before patching.
-        # To enable: set CHALLENGER_VETO_THRESHOLD=0.8 in .env
         challenger_result = await state.get_result("challenger")
+        if challenger_result:
+            _agent_row("Challenger", challenger_result)
+
+        fused = await state.fused_confidence()
+        await state.add_event("coordinator", "confidence_fusion",
+            detail=f"fused_confidence={fused:.2f}", confidence=fused)
+
+        fused_color = "green" if fused >= 0.7 else ("yellow" if fused >= 0.4 else "red")
+        _con.print(f"  [dim]Fused confidence: [/dim][{fused_color}][bold]{int(fused*100)}%[/bold][/{fused_color}]")
+
+        # Challenger veto
         if (
             challenger_result is not None
             and challenger_result.verdict == "counter_evidence_found"
             and challenger_result.confidence >= CHALLENGER_VETO_THRESHOLD
         ):
-            await state.add_event(
-                "coordinator", "challenger_veto",
-                detail=(
-                    f"Challenger confidence {challenger_result.confidence:.2f} "
-                    f">= veto threshold {CHALLENGER_VETO_THRESHOLD} — escalating"
-                ),
-                confidence=challenger_result.confidence,
+            _con.print(
+                f"\n  [yellow]⚔  Challenger veto triggered "
+                f"(conf={challenger_result.confidence:.0%} ≥ {CHALLENGER_VETO_THRESHOLD:.0%}) "
+                f"— escalating for manual review[/yellow]"
             )
-            await state.log_decision(
-                "coordinator", "CHALLENGER_VETO_TRIGGERED",
-                reason=(
-                    f"Strong counter evidence (conf={challenger_result.confidence:.2f}) — "
-                    f"set CHALLENGER_VETO_THRESHOLD higher to suppress"
-                ),
-            )
-            print(
-                f"\n[Vireon] ⚔ Challenger veto triggered "
-                f"(conf={challenger_result.confidence:.2f} >= {CHALLENGER_VETO_THRESHOLD}). "
-                f"Investigation escalated — manual review required."
-            )
+            await state.add_event("coordinator", "challenger_veto",
+                detail=(f"Challenger confidence {challenger_result.confidence:.2f} "
+                        f">= veto threshold {CHALLENGER_VETO_THRESHOLD}"),
+                confidence=challenger_result.confidence)
+            await state.log_decision("coordinator", "CHALLENGER_VETO_TRIGGERED",
+                reason=f"Strong counter evidence (conf={challenger_result.confidence:.2f})")
             await self._print_summary()
             return
 
         if fused < CONFIDENCE_THRESHOLD:
-            await state.add_event("coordinator", "aborted", f"Fused confidence too low ({fused:.2f} < {CONFIDENCE_THRESHOLD}) — investigation inconclusive")
-            print(f"\n[Vireon] Fused confidence {fused:.2f} below threshold {CONFIDENCE_THRESHOLD} — not proceeding to patch.")
+            _con.print(
+                f"\n  [yellow]Fused confidence {int(fused*100)}% below threshold "
+                f"{int(CONFIDENCE_THRESHOLD*100)}% — not proceeding to patch.[/yellow]"
+            )
+            await state.add_event("coordinator", "aborted",
+                detail=f"Fused confidence too low ({fused:.2f} < {CONFIDENCE_THRESHOLD}) — investigation inconclusive")
             await self._print_summary()
             return
 
-        # ── Phase 4: Remediation Loop ─────────────────────────────────────────
-        print("\n[Phase 4] Remediation + Compliance Loop\n")
+        # ── Phase 4: Remediation Loop ─────────────────────────────────────────────
+        _phase(4, "Remediation + Compliance")
+
         remediation_approved = False
 
         while state.remediation_attempts < state.max_remediation_attempts:
             attempt = state.remediation_attempts + 1
-            print(f"  [Remediation attempt {attempt}/{state.max_remediation_attempts}]")
+            _con.print(f"  [dim]Attempt {attempt} of {state.max_remediation_attempts}...[/dim]")
 
             remediation_agent = self._make_agent(
                 RemediationAgent, "REMEDIATION_AGENT_ID", "REMEDIATION_AGENT_KEY"
@@ -229,44 +273,54 @@ class Coordinator:
             compliance_agent = self._make_agent(
                 ComplianceAgent, "COMPLIANCE_AGENT_ID", "COMPLIANCE_AGENT_KEY"
             )
-            compliance_result = await compliance_agent.run()
+            await compliance_agent.run()
+
+            compliance_result = await state.get_result("compliance")
+            if compliance_result:
+                _agent_row("Compliance", compliance_result, attempt=attempt)
 
             if state.compliance_approved:
                 remediation_approved = True
-                await state.add_event("coordinator", "compliance_approved", f"attempt={attempt}")
-                print(f"\n  ✅ Compliance approved on attempt {attempt}")
+                await state.add_event("coordinator", "compliance_approved", detail=f"attempt={attempt}")
                 break
             else:
-                await state.add_event(
-                    "coordinator", "compliance_rejected",
-                    detail=f"attempt={attempt} — retrying",
-                )
-                print(f"\n  ❌ Compliance rejected — retrying...")
-                # Clear patch so RemediationAgent regenerates fresh
+                await state.add_event("coordinator", "compliance_rejected",
+                    detail=f"attempt={attempt} — retrying")
                 state.patch_result = {}
 
         if not remediation_approved:
+            _con.print(f"\n  [red]Remediation failed after {state.max_remediation_attempts} attempts.[/red]")
             await state.add_event("coordinator", "remediation_failed", "Max attempts reached")
-            print(f"\n[Vireon] Remediation failed after {state.max_remediation_attempts} attempts.")
             await self._print_summary()
             return
 
-        # ── Phase 5: Verification + PR ────────────────────────────────────────
-        print("\n[Phase 5] Verification\n")
+        # ── Phase 5: Verification + PR ────────────────────────────────────────────
+        _phase(5, "Verification + Delivery")
+
         verification_agent = self._make_agent(
             VerificationAgent, "VERIFICATION_AGENT_ID", "VERIFICATION_AGENT_KEY"
         )
-        verify_result = await verification_agent.run()
+        await verification_agent.run()
 
-        if verify_result.verdict == "rejected":
+        verify_result = await state.get_result("verification")
+        if verify_result:
+            _agent_row("Verification", verify_result)
+
+        if verify_result and verify_result.verdict == "rejected":
+            _con.print("\n  [red]Verification failed — patch not submitted.[/red]")
             await state.add_event("coordinator", "verification_failed")
-            print("\n[Vireon] Verification failed — patch not submitted.")
             await self._print_summary()
             return
 
-        print("\n[Phase 5b] Delivery (GitHub PR)\n")
         delivery_agent = self._make_agent(DeliveryAgent, "PR_AGENT_ID", "PR_AGENT_KEY")
         await delivery_agent.run()
+
+        pr_result = await state.get_result("pr")
+        if pr_result:
+            _agent_row("GitHub PR", pr_result)
+            pr_url = pr_result.metadata.get("pr_url", "")
+            if pr_url:
+                _con.print(f"  [dim]  → {pr_url}[/dim]")
 
         await state.add_event("coordinator", "completed", "Investigation complete — PR raised")
         await self._print_summary()

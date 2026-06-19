@@ -8,6 +8,7 @@ Timeline events are append-only. Evidence is keyed by agent name.
 """
 
 import asyncio
+import os
 import random
 import string
 from dataclasses import dataclass, field
@@ -148,7 +149,8 @@ class SharedState:
             )
             self._timeline.append(ev)
             conf_str = f" [{confidence:.2f}]" if confidence is not None else ""
-            print(f"[{self.inv_id}] [{ev.timestamp}] {agent.upper():22s} {event.upper():12s}{conf_str}  {detail}")
+            if os.getenv("VIREON_VERBOSE") == "1":
+                print(f"[{self.inv_id}] [{ev.timestamp}] {agent.upper():22s} {event.upper():12s}{conf_str}  {detail}")
         if self._db:
             await self._db.insert_timeline_event(
                 self.inv_id, ts, agent, event, detail or "", confidence
@@ -190,7 +192,8 @@ class SharedState:
                 "round": round_,
             }
             self._decision_log.append(entry)
-            print(f"[DECISION] phase={phase} round={round_} {agent.upper():20s} {action:30s}  {reason}")
+            if os.getenv("VIREON_VERBOSE") == "1":
+                print(f"[DECISION] phase={phase} round={round_} {agent.upper():20s} {action:30s}  {reason}")
         if self._db:
             await self._db.insert_decision(
                 self.inv_id, agent, action, reason or "", metadata or {}
