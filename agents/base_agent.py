@@ -103,10 +103,33 @@ class BandAgent(ABC):
             import functools
             import requests as _req
 
-            # Band returns 422 when content has emoji / non-ASCII characters.
-            # Drop anything outside printable ASCII before sending.
-            clean = message.encode("ascii", errors="ignore").decode("ascii")
-            payload = {"content": f"[{self.name}] {clean}", "mentions": []}
+            # Strip non-ASCII (emoji etc) — Band requires clean ASCII content.
+            clean = message.encode("ascii", errors="ignore").decode("ascii").strip()
+
+            # Band API payload: {"message": {"content": "...", "mentions": [{"id": "..."}]}}
+            # mentions must be a non-empty list of objects — and cannot mention self.
+            # Each agent mentions the next agent in the pipeline (cycles at end).
+            _PIPELINE = [
+                "THREAT", "STATIC", "EXPLOITABILITY", "CHALLENGER",
+                "REMEDIATION", "COMPLIANCE", "VERIFICATION", "PR",
+            ]
+            _NAME_MAP = {
+                "threat": "THREAT", "static": "STATIC",
+                "exploitability": "EXPLOITABILITY", "challenger": "CHALLENGER",
+                "remediation": "REMEDIATION", "compliance": "COMPLIANCE",
+                "verification": "VERIFICATION", "pr": "PR",
+            }
+            agent_key = _NAME_MAP.get(self.name, "THREAT")
+            idx = _PIPELINE.index(agent_key) if agent_key in _PIPELINE else 0
+            next_key = _PIPELINE[(idx + 1) % len(_PIPELINE)]
+            mention_id = os.getenv(f"{next_key}_AGENT_ID", "")
+
+            payload = {
+                "message": {
+                    "content": f"[{self.name}] {clean}",
+                    "mentions": [{"id": mention_id}] if mention_id else [{"id": os.getenv("STATIC_AGENT_ID", "")}],
+                }
+            }
             headers = {"X-API-Key": self.api_key, "Content-Type": "application/json"}
 
             # Run the blocking requests call off the event loop

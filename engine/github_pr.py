@@ -258,6 +258,43 @@ def _get_default_branch(repo_path: str) -> str:
     return "main"
 
 
+def _resolve_latest_versions(dep_bumps: list[dict]) -> dict[str, str]:
+    """
+    For each unique package in dep_bumps that has no concrete version,
+    fetch the current latest version from PyPI and return {pkg: version}.
+    """
+    import urllib.request
+    import json as _json
+
+    packages = {
+        (b.get("package") or "").strip().lower()
+        for b in dep_bumps
+        if (b.get("package") or "").strip()
+    }
+
+    import ssl as _ssl
+    # macOS Python doesn't ship with linked system certs — use unverified context
+    # for public PyPI metadata (no sensitive data transmitted).
+    _ctx = _ssl._create_unverified_context()
+
+    resolved: dict[str, str] = {}
+    for pkg in packages:
+        if not pkg:
+            continue
+        try:
+            url = f"https://pypi.org/pypi/{pkg}/json"
+            with urllib.request.urlopen(url, timeout=8, context=_ctx) as resp:
+                data = _json.loads(resp.read())
+            version = data.get("info", {}).get("version", "")
+            if version:
+                resolved[pkg] = version
+                print(f"[github_pr] Resolved {pkg} latest → {version}")
+        except Exception as e:
+            print(f"[github_pr] Could not resolve latest version for {pkg}: {e}")
+
+    return resolved
+
+
 def _apply_dep_bumps(dep_bumps: list[dict], repo_path: str) -> list[str]:
     """
     Write dependency version bumps into requirements.txt / pyproject.toml.
@@ -277,8 +314,11 @@ def _apply_dep_bumps(dep_bumps: list[dict], repo_path: str) -> list[str]:
                 pkg_version[pkg] = to_ver
 
     if not pkg_version:
-        print("[github_pr] dep bumps present but no concrete versions — skipping requirements update")
-        return []
+        # No concrete versions — try to resolve 'latest' via PyPI
+        pkg_version = _resolve_latest_versions(dep_bumps)
+        if not pkg_version:
+            print("[github_pr] dep bumps present but could not resolve versions — skipping requirements update")
+            return []
 
     modified: list[str] = []
 
@@ -389,10 +429,13 @@ def _create_branch_and_push(patch_result: dict, repo: str, token: str, repo_path
             cwd=repo_path, check=True, capture_output=True,
         )
 
-        # Push using token auth
+        # Push using token auth.
+        # -c credential.helper= disables macOS osxkeychain (and any other
+        # credential helper) so the embedded token in the URL is used directly
+        # rather than being overridden by cached credentials.
         remote_url = f"https://x-access-token:{token}@github.com/{repo}.git"
         result = subprocess.run(
-            ["git", "push", remote_url, branch_name],
+            ["git", "-c", "credential.helper=", "push", remote_url, branch_name],
             cwd=repo_path, capture_output=True,
         )
         if result.returncode != 0:

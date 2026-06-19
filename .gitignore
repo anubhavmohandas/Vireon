@@ -1,35 +1,60 @@
-# Environment — never commit keys
+# ── Secrets — never commit ────────────────────────────────────────────────
 .env
+.env.*
+!.env.example
 
-# SQLite database — local runtime state, not source code
+# ── SQLite (including WAL journal files) ──────────────────────────────────
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 
-# Python
+# ── Python ────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *.pyo
+*.pyd
 .venv/
 venv/
 env/
 myvenv/
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
 
-# Data directories (SAGE outputs — can be large)
+# ── Investigation output (runtime artifacts, not source) ──────────────────
+output/
 data/
 logs/
 
-# OS
+# ── Temp / scratch files ──────────────────────────────────────────────────
+*.tmp
+*.log
+*.bak
+
+# ── Presentation / document exports (generated, not source) ──────────────
+slide-*.jpg
+slide-*.png
+*.pdf
+*.pptx
+*.docx
+*.xlsx
+
+# ── Frontend ──────────────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.*.local
+
+# ── OS ────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 
-# IDE
+# ── IDE ───────────────────────────────────────────────────────────────────
 .vscode/
 .idea/
-
-# Build
-dist/
-build/
-*.egg-info/
-
-Audit.md
+*.swp
+*.swo
