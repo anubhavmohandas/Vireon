@@ -1,6 +1,11 @@
 # Environment — never commit keys
 .env
 
+# SQLite database — local runtime state, not source code
+*.db
+*.sqlite
+*.sqlite3
+
 # Python
 __pycache__/
 *.py[cod]
