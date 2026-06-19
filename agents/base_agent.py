@@ -48,45 +48,77 @@ class BandAgent(ABC):
 
     async def connect_band(self):
         """
-        Connect to Band room via thenvoi SDK.
-        If agent_id/api_key are empty (dev mode), skip silently.
+        Validate Band credentials and mark this agent as Band-connected.
+
+        Vireon agents are task-driven (run once, return result) — they only POST
+        messages to Band, never receive them.  Starting the full WebSocket listener
+        via agent.run() would block forever, so we skip it.  All communication
+        happens via REST in post_to_room().
+
+        Package: band-sdk[anthropic]  (import namespace: `band`, not `thenvoi`)
         """
         if not self.agent_id or not self.api_key:
             print(f"[{self.name}] Band credentials not set — running in local mode")
             return
 
-        try:
-            from thenvoi import Agent
-            from thenvoi.adapters import AnthropicAdapter
+        room_id = os.getenv("BAND_ROOM_ID", "")
+        if not room_id:
+            print(f"[{self.name}] BAND_ROOM_ID not set — Band posting disabled")
+            return
 
-            adapter = AnthropicAdapter(
-                model="claude-sonnet-4-6",
-                custom_section=self.system_prompt,
-                enable_execution_reporting=True,
-            )
-            self._band_agent = Agent.create(
-                adapter=adapter,
-                agent_id=self.agent_id,
-                api_key=self.api_key,
-                ws_url=os.getenv("BAND_WS_URL", "wss://app.band.ai/api/v1/socket/websocket"),
-                rest_url=os.getenv("BAND_REST_URL", "https://app.band.ai/"),
-            )
+        try:
+            # Verify the SDK is importable (catches missing install early)
+            from band import Agent  # noqa: F401
+            self._band_agent = True  # sentinel — means "credentials OK, use REST"
+            print(f"[{self.name}] Band ready (REST mode) ✓")
         except ImportError:
-            print(f"[{self.name}] thenvoi not installed — running in local mode")
+            print(f"[{self.name}] band-sdk not installed — run: pip install 'band-sdk[anthropic]'")
         except Exception as e:
-            print(f"[{self.name}] Band connection failed: {e} — continuing in local mode")
+            print(f"[{self.name}] Band init failed: {e} — continuing in local mode")
+
+    async def _disconnect_band(self):
+        """No persistent connection to tear down (REST-only mode)."""
+        self._band_agent = None
 
     async def post_to_room(self, message: str):
-        """Post a message to the Band room (best-effort)."""
-        if self._band_agent is None:
-            print(f"[{self.name}→Band] {message}")
-            return
+        """
+        Post a message to the shared Band investigation room via REST API.
+
+        Uses POST /api/v1/agent/chats/{BAND_ROOM_ID}/messages with the agent's
+        own API key so messages appear under the correct agent identity in Band.
+
+        Always prints locally too so the terminal log stays complete.
+        """
+        print(f"[{self.name}→Band] {message}")
+
+        room_id = os.getenv("BAND_ROOM_ID", "")
+        if not room_id or not self.api_key or not self._band_agent:
+            return  # No room configured or Band not initialised — local mode only
+
+        rest_url = os.getenv("BAND_REST_URL", "https://app.band.ai/").rstrip("/")
+        endpoint = f"{rest_url}/api/v1/agent/chats/{room_id}/messages"
+
         try:
-            # thenvoi agents post via the adapter's message queue
-            # For hackathon: just print; Band UI shows it via websocket
-            print(f"[{self.name}→Band] {message}")
+            import asyncio
+            import functools
+            import requests as _req
+
+            payload = {"text": f"[{self.name}] {message}"}
+            headers = {"X-API-Key": self.api_key, "Content-Type": "application/json"}
+
+            # Run the blocking requests call off the event loop
+            loop = asyncio.get_event_loop()
+            resp = await loop.run_in_executor(
+                None,
+                functools.partial(
+                    _req.post, endpoint,
+                    json=payload, headers=headers, timeout=10,
+                ),
+            )
+            if resp.status_code not in (200, 201):
+                print(f"[{self.name}] Band post returned {resp.status_code}: {resp.text[:100]}")
         except Exception as e:
-            print(f"[{self.name}] Failed to post to Band: {e}")
+            print(f"[{self.name}] Band post failed: {e}")
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -143,6 +175,9 @@ class BandAgent(ABC):
             await self.state.add_event(self.name, "error", detail=str(e))
             await self.post_to_room(f"❌ [{self.state.inv_id}] {self.name} error: {e}")
             raise
+
+        finally:
+            await self._disconnect_band()
 
     def _rich_detail(self, result: AgentResult) -> str:
         """

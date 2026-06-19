@@ -2,5 +2,7 @@
   "url": "",
   "number": 0,
   "skipped": true,
-  "reason": "Failed to create branch"
+  "reason": "GITHUB_TOKEN or GITHUB_REPO not configured",
+  "draft_path": "/Users/anubhavmohandas/Documents/Claude/Vireon/engine/../output/pr_draft.md",
+  "branch_name": ""
 }

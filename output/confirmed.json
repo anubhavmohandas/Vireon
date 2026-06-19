@@ -2,24 +2,24 @@
   {
     "cve_id": "",
     "check_id": "python.lang.security.insecure-hash-algorithms-md5.insecure-hash-algorithm-md5",
-    "path": "/var/folders/gx/n9tlmwfd08l_llwtcns17_xh0000gn/T/vireon-m9ay8tsm/cybertrace/modules/base.py",
+    "path": "/var/folders/gx/n9tlmwfd08l_llwtcns17_xh0000gn/T/vireon-jbu1us07/cybertrace/modules/base.py",
     "line": 244,
     "vulnerable": false,
-    "confidence": 0.2,
-    "reason": "The code snippet provided does not show any direct use of the MD5 hash function. The warning is likely a false positive or related to a part of the code not shown in the excerpt.",
+    "confidence": 0.3,
+    "reason": "The code excerpt provided does not show any usage of the MD5 hash algorithm. The warning might be a false positive or the actual usage could be elsewhere in the code. Without seeing the specific line, it's difficult to confirm exploitation.",
     "attack_vector": "N/A",
-    "cwe": "N/A",
+    "cwe": "CWE-327",
     "severity": "WARNING"
   },
   {
     "cve_id": "",
     "check_id": "python.lang.security.insecure-hash-algorithms-md5.insecure-hash-algorithm-md5",
-    "path": "/var/folders/gx/n9tlmwfd08l_llwtcns17_xh0000gn/T/vireon-m9ay8tsm/cybertrace/modules/image_module.py",
+    "path": "/var/folders/gx/n9tlmwfd08l_llwtcns17_xh0000gn/T/vireon-jbu1us07/cybertrace/modules/image_module.py",
     "line": 522,
     "vulnerable": false,
-    "confidence": 0.3,
-    "reason": "The use of MD5 in this context is for file hashing and not for cryptographic purposes such as password storage or digital signatures. While MD5 is known to be insecure for cryptographic purposes due to its vulnerability to collision attacks, it is still commonly used for integrity checks and non-cry",
-    "attack_vector": "An attacker could potentially craft two different images that produce the same MD5 hash, leading to a collision. However, this would require significant effort and is unlikely to be a practical attack vector in this context.",
+    "confidence": 0.6,
+    "reason": "While using MD5 for cryptographic purposes is insecure due to its vulnerability to collisions, in this context it appears to be used for file hashing, which may not require cryptographic strength. However, it's still recommended to use a more secure hash function like SHA-256.",
+    "attack_vector": "An attacker could potentially craft two different images that produce the same MD5 hash, leading to false positives in hash-based lookups or comparisons. However, this requires significant computational effort and specific conditions.",
     "cwe": "CWE-327",
     "severity": "WARNING"
   }

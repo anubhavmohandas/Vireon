@@ -133,6 +133,7 @@ class VireonConfig:
     # ── Band connection ───────────────────────────────────────────────────────
     BAND_REST_URL: str = "https://app.band.ai/"
     BAND_WS_URL: str = "wss://app.band.ai/api/v1/socket/websocket"
+    BAND_ROOM_ID: str = ""   # ID of the shared investigation chat room in Band
 
     # ── Band agent IDs + keys (one per agent) ────────────────────────────────
     # Get these from app.band.ai → Agents → <agent> → Settings
