@@ -1,0 +1,185 @@
+/* ============================================================================
+   Vireon design system — Light
+   A polished security operations console. Cool off-white base, vivid violet
+   command accent, pure-white panels with soft shadows, and one fixed signature
+   color per agent so the timeline, cards, and graph speak the same language.
+   ========================================================================== */
+
+:root {
+  /* Surfaces — cool off-white base, white panels, hairlines */
+  --bg: #f4f5f8;
+  --bg-grid: #e9ebf1;
+  --panel: #ffffff;
+  --panel-raised: #f6f7fb;
+  --border: #e6e8ee;
+  --border-bright: #d4d8e2;
+
+  /* Soft elevation for panels on the light base */
+  --shadow: 0 1px 2px rgba(17, 24, 39, 0.04), 0 6px 16px rgba(17, 24, 39, 0.05);
+  --shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.06);
+
+  /* Ink */
+  --text: #14161d;
+  --text-dim: #59606f;
+  --text-faint: #9197a6;
+
+  /* Command accent */
+  --violet: #7c3aed;
+  --violet-dim: #c4b5fd;
+  --violet-glow: rgba(124, 58, 237, 0.12);
+
+  /* Verdict semantics */
+  --ok: #16a34a;
+  --warn: #d97706;
+  --bad: #dc2626;
+  --ok-bg: rgba(22, 163, 74, 0.10);
+  --warn-bg: rgba(217, 119, 6, 0.10);
+  --bad-bg: rgba(220, 38, 38, 0.10);
+  --neutral-bg: rgba(89, 96, 111, 0.08);
+
+  /* Type */
+  --display: "Space Grotesk", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  --body: system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --radius: 10px;
+  --radius-sm: 6px;
+}
+
+/* Agent signature colors — vivid 600-level hues, all readable on white */
+:root {
+  --agent-threat: #2563eb;
+  --agent-static: #16a34a;
+  --agent-exploitability: #7c3aed;
+  --agent-challenger: #dc2626;
+  --agent-remediation: #db2777;
+  --agent-compliance: #d97706;
+  --agent-verification: #0d9488;
+  --agent-pr: #ea580c;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: var(--body);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  /* faint operations-console grid */
+  background-image:
+    linear-gradient(var(--bg-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px);
+  background-size: 44px 44px;
+  background-position: -1px -1px;
+}
+
+a {
+  color: var(--violet);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  font-family: var(--display);
+  cursor: pointer;
+}
+
+::selection {
+  background: var(--violet-glow);
+  color: var(--text);
+}
+
+/* Scrollbars */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-bright);
+  border-radius: 99px;
+  border: 2px solid var(--bg);
+}
+
+/* ── Shared layout primitives ──────────────────────────────────────────────*/
+
+.shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.topbar {
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.topbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 58px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text);
+  font-size: 15px;
+}
+.brand .spark {
+  color: var(--violet);
+  font-size: 18px;
+}
+.topbar-meta {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.mono {
+  font-family: var(--mono);
+}
+
+/* reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
