@@ -162,12 +162,13 @@ class VireonConfig:
 
 
 def load_config() -> VireonConfig:
-    aiml_key = os.getenv("AIML_API_KEY", "")
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
+    featherless_key = os.getenv("FEATHERLESS_API_KEY", "")
+    aiml_key        = os.getenv("AIML_API_KEY", "")
+    anthropic_key   = os.getenv("ANTHROPIC_API_KEY", "")
 
-    if not aiml_key and not anthropic_key:
+    if not featherless_key and not aiml_key and not anthropic_key:
         print("[Vireon] WARNING: No LLM key found — LLM-dependent agents will be skipped.")
-        print("  Set AIML_API_KEY or ANTHROPIC_API_KEY in .env to enable full pipeline.")
+        print("  Set FEATHERLESS_API_KEY, AIML_API_KEY, or ANTHROPIC_API_KEY in .env to enable full pipeline.")
 
     if aiml_key and not anthropic_key:
         os.environ["ANTHROPIC_API_KEY"] = aiml_key
