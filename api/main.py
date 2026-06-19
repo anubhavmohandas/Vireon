@@ -31,14 +31,17 @@ async def lifespan(app: FastAPI):
       - await get_db().init()
     """
     # ── startup ───────────────────────────────────────────────────────────────
-    # TODO: await get_db().init()
+    from db import get_db
+    await get_db().init()
+    print("[Vireon API] DB initialised ✓")
     print("[Vireon API] Starting up...")
 
     yield
 
     # ── shutdown ──────────────────────────────────────────────────────────────
     print("[Vireon API] Shutting down — cancelling active scans...")
-    for inv_id, task in active_tasks.items():
+    from api.routes.scan import _active_tasks
+    for inv_id, task in _active_tasks.items():
         task.cancel()
         print(f"  Cancelled: {inv_id}")
 

@@ -6,19 +6,14 @@ Returns the full investigation summary — all agent results, decision log,
 confidence evolution, and investigation metadata in one payload.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from api.models import FullSummary
+from db import get_db, InvestigationRepo
 
 router = APIRouter(prefix="/api/investigations", tags=["summary"])
 
 
 @router.get("/{inv_id}/summary", response_model=FullSummary)
 async def get_summary(inv_id: str):
-    """
-    Full summary page data — one call for everything the UI needs.
-
-    TODO (Vedika):
-      1. Call InvestigationRepo.get_full_summary(inv_id)
-      2. Return result
-    """
-    raise HTTPException(status_code=501, detail="Not implemented yet")
+    repo = InvestigationRepo(get_db())
+    return await repo.get_full_summary(inv_id)

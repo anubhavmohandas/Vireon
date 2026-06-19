@@ -51,10 +51,11 @@ class Coordinator:
         await coordinator.run()
     """
 
-    def __init__(self, repo_path: str, days: int = 7):
+    def __init__(self, repo_path: str, days: int = 7, db=None):
         self.repo_path = repo_path
         self.days = days
-        self.state = SharedState(repo_path=repo_path)
+        self.state = SharedState(repo_path=repo_path, db=db)
+        self._db = db
         self.start_time = None
 
     def _make_agent(self, cls, id_key: str, key_key: str, **kwargs):
@@ -65,6 +66,9 @@ class Coordinator:
     async def run(self):
         self.start_time = datetime.now()
         state = self.state
+
+        if self._db:
+            await self._db.insert_investigation(state.inv_id, self.repo_path, self.days)
 
         print("\n" + "═" * 60)
         print("  VIREON — Autonomous Security Investigation Platform")
@@ -266,7 +270,12 @@ class Coordinator:
         await state.add_event("coordinator", "completed", "Investigation complete — PR raised")
         await self._print_summary()
 
-    async def _print_summary(self):
+    async def _print_summary(self, status: str = "completed"):
         """Print the full investigation summary at end of run."""
         elapsed = (datetime.now() - self.start_time).total_seconds()
         await generate_summary(self.state, elapsed_s=elapsed)
+        if self._db:
+            fused = await self.state.fused_confidence()
+            await self._db.update_investigation_status(
+                self.state.inv_id, status, fused_confidence=fused
+            )

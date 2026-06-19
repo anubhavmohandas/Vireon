@@ -61,10 +61,11 @@ class SharedState:
         results = await state.get_results()
     """
 
-    def __init__(self, repo_path: str):
+    def __init__(self, repo_path: str, db=None):
         self.repo_path = repo_path
         self.inv_id = _generate_inv_id()
         self._lock = asyncio.Lock()
+        self._db = db   # optional Database instance for write-through persistence
 
         # Evidence keyed by agent name
         self._results: dict[str, AgentResult] = {}
@@ -103,6 +104,11 @@ class SharedState:
     async def post_result(self, agent: str, result: AgentResult):
         async with self._lock:
             self._results[agent] = result
+        if self._db:
+            await self._db.upsert_agent_result(
+                self.inv_id, agent, result.verdict, result.confidence,
+                result.evidence, result.metadata, result.duration_ms or 0,
+            )
 
     async def get_result(self, agent: str) -> Optional[AgentResult]:
         async with self._lock:
@@ -121,6 +127,7 @@ class SharedState:
         detail: str = "",
         confidence: Optional[float] = None,
     ):
+        ts = datetime.now().isoformat()
         async with self._lock:
             ev = TimelineEvent(
                 timestamp=datetime.now().strftime("%H:%M:%S"),
@@ -133,6 +140,10 @@ class SharedState:
             self._timeline.append(ev)
             conf_str = f" [{confidence:.2f}]" if confidence is not None else ""
             print(f"[{self.inv_id}] [{ev.timestamp}] {agent.upper():22s} {event.upper():12s}{conf_str}  {detail}")
+        if self._db:
+            await self._db.insert_timeline_event(
+                self.inv_id, ts, agent, event, detail or "", confidence
+            )
 
     async def get_timeline(self) -> list[TimelineEvent]:
         async with self._lock:
@@ -171,6 +182,10 @@ class SharedState:
             }
             self._decision_log.append(entry)
             print(f"[DECISION] phase={phase} round={round_} {agent.upper():20s} {action:30s}  {reason}")
+        if self._db:
+            await self._db.insert_decision(
+                self.inv_id, agent, action, reason or "", metadata or {}
+            )
 
     async def get_decision_log(self) -> list[dict]:
         async with self._lock:
@@ -183,6 +198,7 @@ class SharedState:
         Record a confidence snapshot for the evolution timeline.
         Call after each agent finishes so the UI can show confidence rising/falling.
         """
+        ts = datetime.now().isoformat()
         async with self._lock:
             self._confidence_evolution.append({
                 "timestamp": datetime.now().strftime("%H:%M:%S"),
@@ -190,6 +206,10 @@ class SharedState:
                 "confidence": round(confidence, 3),
                 "label": label or agent,
             })
+        if self._db:
+            await self._db.insert_confidence_snapshot(
+                self.inv_id, ts, agent, round(confidence, 3), label or agent
+            )
 
     async def get_confidence_evolution(self) -> list[dict]:
         async with self._lock:

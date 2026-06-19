@@ -103,7 +103,7 @@ class BandAgent(ABC):
             import functools
             import requests as _req
 
-            payload = {"text": f"[{self.name}] {message}"}
+            payload = {"content": f"[{self.name}] {message}", "mentions": []}
             headers = {"X-API-Key": self.api_key, "Content-Type": "application/json"}
 
             # Run the blocking requests call off the event loop

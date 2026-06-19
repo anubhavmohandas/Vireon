@@ -46,7 +46,9 @@ class DeliveryAgent(BandAgent):
         skipped = m.get("skipped", False)
         cves = m.get("cves_addressed", 0)
         if skipped:
-            return f"draft saved (no GITHUB_TOKEN) | CVEs addressed={cves} | conf={result.confidence:.2f}"
+            reason = m.get("reason", "")
+            skip_label = "no files to patch" if "no files" in reason.lower() or "no patch" in reason.lower() else reason or "skipped"
+            return f"PR skipped ({skip_label}) | CVEs addressed={cves} | conf={result.confidence:.2f}"
         if pr_url:
             return f"PR #{pr_number} opened | CVEs addressed={cves} | {pr_url}"
         return f"delivery failed | conf={result.confidence:.2f} +{result.duration_ms}ms"

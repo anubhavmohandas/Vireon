@@ -2,24 +2,24 @@
   {
     "cve_id": "",
     "check_id": "python.lang.security.insecure-hash-algorithms-md5.insecure-hash-algorithm-md5",
-    "path": "/var/folders/gx/n9tlmwfd08l_llwtcns17_xh0000gn/T/vireon-e0u67xua/cybertrace/modules/base.py",
+    "path": "/var/folders/gx/n9tlmwfd08l_llwtcns17_xh0000gn/T/vireon-7kbftbak/cybertrace/modules/base.py",
     "line": 244,
     "vulnerable": false,
     "confidence": 0.3,
-    "reason": "The code snippet provided does not show any direct use of the MD5 hash function. The warning is likely a false positive or related to a part of the code not shown here.",
+    "reason": "The MD5 hash algorithm is detected, but there is no immediate context showing its use in a security-sensitive manner such as password hashing or secure data verification. The presence of MD5 alone does not indicate a direct vulnerability.",
     "attack_vector": "N/A",
-    "cwe": "N/A",
+    "cwe": "CWE-327",
     "severity": "WARNING"
   },
   {
     "cve_id": "",
     "check_id": "python.lang.security.insecure-hash-algorithms-md5.insecure-hash-algorithm-md5",
-    "path": "/var/folders/gx/n9tlmwfd08l_llwtcns17_xh0000gn/T/vireon-e0u67xua/cybertrace/modules/image_module.py",
+    "path": "/var/folders/gx/n9tlmwfd08l_llwtcns17_xh0000gn/T/vireon-7kbftbak/cybertrace/modules/image_module.py",
     "line": 522,
     "vulnerable": false,
-    "confidence": 0.6,
-    "reason": "The use of MD5 for file hashing is not inherently exploitable in this context, as the primary purpose appears to be for file identification rather than cryptographic security. However, MD5 is known to be weak against collision attacks, which could potentially be exploited in certain scenarios.",
-    "attack_vector": "An attacker could craft two different images that produce the same MD5 hash, leading to false positives in the file hash intelligence lookups.",
+    "confidence": 0.7,
+    "reason": "While using MD5 is generally considered insecure due to its vulnerability to collision attacks, in this context it is used for file hashing which may not necessarily be for cryptographic purposes. The risk is lower if the hashes are used for integrity checks rather than security-critical operations.",
+    "attack_vector": "An attacker could potentially craft two different files that produce the same MD5 hash, leading to a collision. However, this would require significant effort and specific conditions, making it less likely in a general OSINT context.",
     "cwe": "CWE-327",
     "severity": "WARNING"
   }
