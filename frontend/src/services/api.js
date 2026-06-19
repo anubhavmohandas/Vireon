@@ -4,23 +4,18 @@
  * All backend calls go through here. The endpoint contract matches
  * api/routes/*.py and api/models.py exactly.
  *
- * Backend status: as of now every route in api/routes returns 501 (the
- * handlers are stubbed). To keep the UI fully demoable in the meantime, this
- * client falls back to mock data (src/services/mock.js) when:
- *   - VITE_USE_MOCK=1 is set, OR
- *   - a live request fails with 501 Not Implemented.
- * Once the FastAPI routes are live, real data flows through with no code change.
+ * Routes are live — mock is now opt-in, not opt-out.
+ * Set VITE_USE_MOCK=1 to force mock mode (demo without a running backend).
+ * The mock also kicks in automatically on 501/404/network errors as a last
+ * resort so the UI never fully dead-ends.
  */
 
 import * as mock from "./mock";
 
 const API_BASE = import.meta.env.VITE_API_URL || ""; // "" -> same-origin via Vite proxy
 
-// Mock is the default until a real backend is wired up. Set VITE_USE_MOCK=0
-// (or point VITE_API_URL at a server with the routes implemented) to go live.
-// The mock also kicks in automatically on 501/404/network errors so the demo
-// never dead-ends while api/routes/*.py are still stubbed.
-const USE_MOCK = import.meta.env.VITE_USE_MOCK !== "0";
+// Live API by default. Set VITE_USE_MOCK=1 to use mock data (demo mode).
+const USE_MOCK = import.meta.env.VITE_USE_MOCK === "1";
 
 class Recoverable extends Error {}
 

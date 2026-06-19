@@ -94,6 +94,7 @@ class DeliveryAgent(BandAgent):
             test_results=test_results,
             verify_results=verify_results,
             repo_path=repo_path,
+            github_repo=self.state.github_repo or "",
         )
         save_pr_result(pr_result)
         self.state.pr_result = pr_result
@@ -101,6 +102,8 @@ class DeliveryAgent(BandAgent):
         pr_url = pr_result.get("url", "") if isinstance(pr_result, dict) else ""
         pr_number = pr_result.get("number", "") if isinstance(pr_result, dict) else ""
         skipped = pr_result.get("skipped", False) if isinstance(pr_result, dict) else False
+        draft_path = pr_result.get("draft_path", "") if isinstance(pr_result, dict) else ""
+        reason = pr_result.get("reason", "") if isinstance(pr_result, dict) else ""
 
         evidence = [{"pr_url": pr_url, "pr_number": pr_number, "skipped": skipped}]
         verdict = "confirmed" if pr_url and not skipped else "inconclusive"
@@ -115,6 +118,8 @@ class DeliveryAgent(BandAgent):
                 "pr_url": pr_url,
                 "pr_number": pr_number,
                 "skipped": skipped,
+                "reason": reason,
+                "pr_path": draft_path,        # Summary.jsx checks this for "draft saved" banner
                 "cves_addressed": len(all_cves),
             },
         )

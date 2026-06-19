@@ -24,17 +24,24 @@ def run_github_pr(
     test_results: dict,
     verify_results: dict,
     repo_path: str,
+    github_repo: str = "",
 ) -> dict:
     """
     Create a GitHub PR with the security patch.
 
-    If GITHUB_TOKEN / GITHUB_REPO not set, falls back to saving a PR draft markdown.
+    `github_repo` — "owner/repo" derived from the scanned URL at scan time.
+    Falls back to GITHUB_REPO env var if not supplied (CLI / local path scans).
+    If neither is set, saves a PR draft to output/pr_draft.md instead.
 
     Returns:
         {url, number, skipped, pr_body, branch_name}
     """
     token = os.getenv("GITHUB_TOKEN", "")
-    repo = os.getenv("GITHUB_REPO", "")  # format: "owner/repo"
+    # Prefer the runtime-derived repo (from the scanned URL) over the env var
+    # so PRs always target the repo that was actually scanned.
+    repo = github_repo or os.getenv("GITHUB_REPO", "")  # format: "owner/repo"
+    if github_repo and github_repo != os.getenv("GITHUB_REPO", ""):
+        print(f"[github_pr] Using scanned repo target: {repo}")
 
     pr_body = _build_pr_body(patch_result, confirmed, all_cves, test_results, verify_results, repo_path)
 
@@ -55,12 +62,14 @@ def run_github_pr(
     try:
         import requests
 
-        branch_name, default_branch = _create_branch_and_push(patch_result, repo, token, repo_path)
+        branch_name, default_branch, push_reason = _create_branch_and_push(patch_result, repo, token, repo_path)
         if not branch_name:
+            draft_path = _save_pr_draft(pr_body)
             return {
                 "url": "", "number": 0, "skipped": True,
-                "reason": "Failed to create branch",
+                "reason": push_reason or "no patches to apply",
                 "pr_body": pr_body,
+                "draft_path": draft_path,
             }
 
         # Generate PR title
@@ -249,10 +258,84 @@ def _get_default_branch(repo_path: str) -> str:
     return "main"
 
 
-def _create_branch_and_push(patch_result: dict, repo: str, token: str, repo_path: str) -> tuple[str | None, str]:
+def _apply_dep_bumps(dep_bumps: list[dict], repo_path: str) -> list[str]:
+    """
+    Write dependency version bumps into requirements.txt / pyproject.toml.
+    Returns list of repo-relative file paths that were modified (for git staging).
+    """
+    if not dep_bumps:
+        return []
+
+    # Deduplicate: latest safe version per package
+    pkg_version: dict[str, str] = {}
+    for bump in dep_bumps:
+        pkg = (bump.get("package") or "").strip().lower()
+        to_ver = (bump.get("safe_version") or bump.get("to") or "").strip()
+        if pkg and to_ver and to_ver not in ("latest", "?", ""):
+            # Keep highest version seen (simple string comparison is ok for semver)
+            if pkg not in pkg_version or to_ver > pkg_version[pkg]:
+                pkg_version[pkg] = to_ver
+
+    if not pkg_version:
+        print("[github_pr] dep bumps present but no concrete versions — skipping requirements update")
+        return []
+
+    modified: list[str] = []
+
+    # ── requirements.txt ──────────────────────────────────────────────────────
+    req_file = os.path.join(repo_path, "requirements.txt")
+    if os.path.isfile(req_file):
+        with open(req_file) as f:
+            req_lines = f.readlines()
+        new_lines = []
+        changed = False
+        for line in req_lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                new_lines.append(line)
+                continue
+            # Extract package name (before any version specifier)
+            pkg_name = stripped.split("==")[0].split(">=")[0].split("<=")[0].split("~=")[0].strip().lower()
+            if pkg_name in pkg_version:
+                new_line = f"{pkg_name}>={pkg_version[pkg_name]}\n"
+                if new_line != line:
+                    print(f"[github_pr] Bump {pkg_name} → >={pkg_version[pkg_name]}")
+                    changed = True
+                new_lines.append(new_line)
+            else:
+                new_lines.append(line)
+        if changed:
+            with open(req_file, "w") as f:
+                f.writelines(new_lines)
+            modified.append("requirements.txt")
+
+    # ── pyproject.toml (basic) ────────────────────────────────────────────────
+    pyproject_file = os.path.join(repo_path, "pyproject.toml")
+    if os.path.isfile(pyproject_file):
+        with open(pyproject_file) as f:
+            content = f.read()
+        changed = False
+        import re
+        for pkg, ver in pkg_version.items():
+            # Match: "packagename>=x.y" or "packagename==x.y" in toml strings
+            pattern = rf'("{pkg}|{pkg.replace("-","_")})(>=|==|~=|<=)[^"\']*'
+            replacement = rf'\g<1>>={ver}'
+            new_content, n = re.subn(pattern, replacement, content, flags=re.IGNORECASE)
+            if n:
+                content = new_content
+                changed = True
+        if changed:
+            with open(pyproject_file, "w") as f:
+                f.write(content)
+            modified.append("pyproject.toml")
+
+    return modified
+
+
+def _create_branch_and_push(patch_result: dict, repo: str, token: str, repo_path: str) -> tuple[str | None, str, str]:
     """
     Create a git branch, apply patches, and push.
-    Returns (branch_name, default_branch) or (None, default_branch) on failure.
+    Returns (branch_name, default_branch, reason) — branch_name is None on failure.
     """
     import subprocess
 
@@ -266,6 +349,10 @@ def _create_branch_and_push(patch_result: dict, repo: str, token: str, repo_path
     patched_files: list[str] = []
 
     try:
+        # Ensure git user identity is set in this (possibly temp) clone
+        subprocess.run(["git", "config", "user.email", "vireon-bot@vireon.ai"], cwd=repo_path, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Vireon Security Bot"], cwd=repo_path, capture_output=True)
+
         # Create branch
         subprocess.run(["git", "checkout", "-b", branch_name], cwd=repo_path, check=True, capture_output=True)
 
@@ -279,18 +366,22 @@ def _create_branch_and_push(patch_result: dict, repo: str, token: str, repo_path
             try:
                 with open(full_path, "w") as f:
                     f.write(patched_code)
-                # Store repo-relative path for `git add`
                 rel_path = os.path.relpath(full_path, repo_path)
                 patched_files.append(rel_path)
             except Exception as e:
                 print(f"[github_pr] Failed to write patch for {file_path}: {e}")
 
-        if not patched_files:
-            print("[github_pr] No files written — nothing to commit")
-            subprocess.run(["git", "checkout", default_branch], cwd=repo_path, capture_output=True)
-            return None, default_branch
+        # Apply dep bumps to requirements files even when no code patches exist
+        dep_bumps = patch_result.get("dep_bumps", []) if isinstance(patch_result, dict) else []
+        dep_files = _apply_dep_bumps(dep_bumps, repo_path)
+        patched_files.extend(dep_files)
 
-        # Stage ONLY the patched files — never `git add -A`
+        if not patched_files:
+            print("[github_pr] No files patched and no dep bumps — nothing to commit")
+            subprocess.run(["git", "checkout", default_branch], cwd=repo_path, capture_output=True)
+            return None, default_branch, "no code patches or dep bumps to apply"
+
+        # Stage ONLY the patched/bumped files — never `git add -A`
         subprocess.run(["git", "add", "--"] + patched_files, cwd=repo_path, check=True, capture_output=True)
 
         subprocess.run(
@@ -298,24 +389,27 @@ def _create_branch_and_push(patch_result: dict, repo: str, token: str, repo_path
             cwd=repo_path, check=True, capture_output=True,
         )
 
-        # Push
+        # Push using token auth
         remote_url = f"https://x-access-token:{token}@github.com/{repo}.git"
-        subprocess.run(
+        result = subprocess.run(
             ["git", "push", remote_url, branch_name],
-            cwd=repo_path, check=True, capture_output=True,
+            cwd=repo_path, capture_output=True,
         )
+        if result.returncode != 0:
+            stderr = result.stderr.decode() if result.stderr else ""
+            print(f"[github_pr] Push failed: {stderr[:200]}")
+            return None, default_branch, f"git push failed: {stderr[:100]}"
 
-        return branch_name, default_branch
+        return branch_name, default_branch, ""
 
     except subprocess.CalledProcessError as e:
         stderr = e.stderr.decode() if isinstance(e.stderr, bytes) else (e.stderr or "")
         print(f"[github_pr] Git error: {stderr}")
-        # Restore to default branch (not hardcoded 'main')
         try:
             subprocess.run(["git", "checkout", default_branch], cwd=repo_path, capture_output=True)
         except Exception:
             pass
-        return None, default_branch
+        return None, default_branch, f"git error: {stderr[:100]}"
 
 
 def _save_pr_draft(pr_body: str, out_dir: str = _OUT_DIR) -> str:

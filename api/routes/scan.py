@@ -30,6 +30,27 @@ def _clone_if_needed(repo_input: str) -> str:
     return repo_input
 
 
+def _extract_github_repo(repo_input: str) -> str:
+    """
+    Parse 'owner/repo' from a GitHub URL so the delivery agent can raise
+    the PR against the exact repo that was scanned, not whatever is set in .env.
+
+    Handles:
+      https://github.com/owner/repo
+      https://github.com/owner/repo.git
+      git@github.com:owner/repo.git
+    Returns "" for local paths (falls back to GITHUB_REPO env var).
+    """
+    import re
+    m = re.match(r"https?://github\.com/([^/]+/[^/\s]+?)(?:\.git)?/?$", repo_input.strip())
+    if m:
+        return m.group(1)
+    m = re.match(r"git@github\.com:([^/]+/[^/\s]+?)(?:\.git)?$", repo_input.strip())
+    if m:
+        return m.group(1)
+    return ""
+
+
 @router.post("/scan", response_model=ScanResponse)
 async def start_scan(body: ScanRequest):
     """
@@ -48,6 +69,16 @@ async def start_scan(body: ScanRequest):
     from memory.shared_state import SharedState
     state = SharedState(repo_path=repo_path, db=db)
     inv_id = state.inv_id
+
+    # Auto-derive target GitHub repo from the submitted URL so the delivery
+    # agent raises the PR against the right repo without any manual .env change.
+    state.github_repo = _extract_github_repo(body.repo_path)
+    if state.github_repo:
+        print(f"[scan] Auto-derived GITHUB_REPO={state.github_repo} from submitted URL")
+
+    # Store the original URL so the coordinator/UI shows it instead of the temp clone path.
+    state.original_repo_path = body.repo_path
+
     await db.insert_investigation(inv_id, body.repo_path, body.days)
 
     async def _task():

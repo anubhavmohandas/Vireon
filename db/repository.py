@@ -42,13 +42,94 @@ class InvestigationRepo:
         agent_results = await self.db.get_agent_results(inv_id)
         decisions = await self.db.get_decisions(inv_id)
         conf_evo = await self.db.get_confidence_evolution(inv_id)
+        vulns = self._build_vulnerabilities(agent_results)
 
         return {
             "investigation": inv,
             "agent_results": agent_results,
             "decision_log": decisions,
             "confidence_evolution": conf_evo,
+            "vulnerabilities": vulns,
         }
+
+    def _build_vulnerabilities(self, agent_results: list[dict]) -> list[dict]:
+        """
+        Derive a de-duplicated Vulnerabilities list from real agent evidence.
+
+        CVE evidence is grouped by package — one row per affected package, not
+        one row per GHSA advisory (a single package can have dozens of advisories
+        which floods the UI).  Static findings are listed individually since each
+        points to a distinct code location.
+
+        Status precedence (per entry):
+          - challenger dismissed → "mitigated"
+          - verification confirmed → "patched"
+          - otherwise → "open"
+        """
+        by_agent = {r["agent"]: r for r in agent_results}
+
+        patched_ok = (by_agent.get("verification") or {}).get("verdict") == "confirmed"
+        dismissed_count = (by_agent.get("challenger") or {}).get("metadata", {}).get("dismissed", 0)
+
+        vulns: list[dict] = []
+
+        # ── CVEs from threat intel — one entry per unique package ─────────────
+        threat = by_agent.get("threat")
+        if threat:
+            # Collect highest-severity CVE id per package
+            pkg_map: dict[str, dict] = {}  # pkg → best evidence item
+            sev_order = {"critical": 4, "high": 3, "medium": 2, "low": 1, "unknown": 0}
+            for ev in threat.get("evidence", []):
+                cve_id = ev.get("cve_id", "")
+                pkg = ev.get("package", "") or "unknown"
+                if not cve_id or cve_id == "?":
+                    continue
+                sev = (ev.get("severity") or "unknown").lower()
+                existing = pkg_map.get(pkg)
+                if existing is None or sev_order.get(sev, 0) > sev_order.get(
+                    (existing.get("severity") or "unknown").lower(), 0
+                ):
+                    pkg_map[pkg] = ev
+
+            for pkg, ev in pkg_map.items():
+                cve_id = ev.get("cve_id", "")
+                sev = (ev.get("severity") or "unknown").lower()
+                vulns.append({
+                    "id": cve_id,
+                    "title": f"{cve_id} in {pkg}",
+                    "severity": sev,
+                    "location": pkg,
+                    "status": "patched" if patched_ok else "open",
+                    "confidence": threat.get("confidence", 0.5),
+                    "source": ev.get("source", "OSV"),
+                })
+
+        # ── Code findings from static analysis ────────────────────────────────
+        static = by_agent.get("static")
+        if static:
+            for i, ev in enumerate(static.get("evidence", [])):
+                rule = ev.get("rule", f"FIND-{i+1:03d}")
+                file_ = ev.get("file", "?")
+                line = ev.get("line", "")
+                msg = ev.get("message", rule)
+                loc = f"{file_}:{line}" if line else file_
+                vulns.append({
+                    "id": rule,
+                    "title": msg or rule,
+                    "severity": "warning",
+                    "location": loc,
+                    "status": "patched" if patched_ok else "open",
+                    "confidence": static.get("confidence", 0.5),
+                    "source": "Semgrep",
+                })
+
+        # Challenger-dismissed findings → "mitigated" (apply to last N static entries)
+        if dismissed_count and vulns:
+            static_vulns = [v for v in vulns if v["source"] == "Semgrep"]
+            for v in static_vulns[-dismissed_count:]:
+                v["status"] = "mitigated"
+
+        return vulns
 
     # ── Timeline ──────────────────────────────────────────────────────────────
 

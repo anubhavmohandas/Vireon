@@ -85,6 +85,15 @@ class SharedState:
         self.verify_results: dict = {}              # verifier output
         self.pr_result: dict = {}                   # GitHub PR output
 
+        # Derived from the scanned repo URL — overrides GITHUB_REPO env var.
+        # Set by scan.py when the user submits a GitHub URL so PRs always
+        # target the exact repo that was scanned.
+        self.github_repo: str = ""                  # "owner/repo" or ""
+
+        # Original URL/path as submitted by the user (before cloning to temp dir).
+        # Used for display so the UI never shows /var/folders/... temp paths.
+        self.original_repo_path: str = repo_path
+
         # Challenger/compliance loop state
         self.challenger_objection: Optional[str] = None
         self.compliance_approved: Optional[bool] = None

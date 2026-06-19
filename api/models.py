@@ -92,8 +92,21 @@ class GraphData(BaseModel):
     edges: list[GraphEdge]
 
 
+class Vulnerability(BaseModel):
+    id: str
+    title: str
+    severity: str
+    location: str
+    status: str          # "patched" | "mitigated" | "open"
+    confidence: float
+    fix: Optional[str] = None
+    source: Optional[str] = None
+    reachable_via: Optional[str] = None
+
+
 class FullSummary(BaseModel):
     investigation: InvestigationStatus
     agent_results: list[AgentResult]
     decision_log: list[DecisionEntry]
     confidence_evolution: list[ConfidenceSnapshot]
+    vulnerabilities: list[Vulnerability] = []

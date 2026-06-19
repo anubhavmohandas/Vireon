@@ -77,7 +77,8 @@ class Coordinator:
         print(f"  Started:       {self.start_time.strftime('%H:%M:%S')}")
         print("═" * 60 + "\n")
 
-        await state.add_event("coordinator", "started", f"[{state.inv_id}] repo={self.repo_path}")
+        display_repo = getattr(state, "original_repo_path", None) or self.repo_path
+        await state.add_event("coordinator", "started", f"[{state.inv_id}] repo={display_repo}")
         print(f"  Investigation ID: {state.inv_id}\n")
 
         # ── Phase 1: ThreatIntel + Static run in parallel ─────────────────────

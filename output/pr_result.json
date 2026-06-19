@@ -2,5 +2,6 @@
   "url": "",
   "number": 0,
   "skipped": true,
-  "reason": "Failed to create branch"
+  "reason": "no code patches generated",
+  "draft_path": "/Users/anubhavmohandas/Documents/Claude/Vireon/engine/../output/pr_draft.md"
 }
