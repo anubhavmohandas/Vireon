@@ -7,6 +7,7 @@ No SAGE dependency — Vireon standalone.
 """
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -27,21 +28,24 @@ def detect_stack(repo_path: str) -> dict[str, str]:
         if req_path.exists():
             found = _parse_requirements_txt(req_path)
             packages.update(found)
-            print(f"[stack] Found {len(found)} packages in {req_file}")
+            if os.getenv("VIREON_VERBOSE") == "1":
+                print(f"[stack] Found {len(found)} packages in {req_file}")
 
     pyproject = path / "pyproject.toml"
     if pyproject.exists():
         found = _parse_pyproject_toml(pyproject)
         packages.update(found)
         if found:
-            print(f"[stack] Found {len(found)} packages in pyproject.toml")
+            if os.getenv("VIREON_VERBOSE") == "1":
+                print(f"[stack] Found {len(found)} packages in pyproject.toml")
 
     pipfile = path / "Pipfile"
     if pipfile.exists():
         found = _parse_pipfile(pipfile)
         packages.update(found)
         if found:
-            print(f"[stack] Found {len(found)} packages in Pipfile")
+            if os.getenv("VIREON_VERBOSE") == "1":
+                print(f"[stack] Found {len(found)} packages in Pipfile")
 
     # Node.js
     package_json = path / "package.json"
@@ -49,7 +53,8 @@ def detect_stack(repo_path: str) -> dict[str, str]:
         found = _parse_package_json(package_json)
         packages.update(found)
         if found:
-            print(f"[stack] Found {len(found)} packages in package.json")
+            if os.getenv("VIREON_VERBOSE") == "1":
+                print(f"[stack] Found {len(found)} packages in package.json")
 
     # Go
     go_mod = path / "go.mod"
@@ -57,7 +62,8 @@ def detect_stack(repo_path: str) -> dict[str, str]:
         found = _parse_go_mod(go_mod)
         packages.update(found)
         if found:
-            print(f"[stack] Found {len(found)} packages in go.mod")
+            if os.getenv("VIREON_VERBOSE") == "1":
+                print(f"[stack] Found {len(found)} packages in go.mod")
 
     # Rust
     cargo = path / "Cargo.toml"
@@ -65,9 +71,10 @@ def detect_stack(repo_path: str) -> dict[str, str]:
         found = _parse_cargo_toml(cargo)
         packages.update(found)
         if found:
-            print(f"[stack] Found {len(found)} packages in Cargo.toml")
+            if os.getenv("VIREON_VERBOSE") == "1":
+                print(f"[stack] Found {len(found)} packages in Cargo.toml")
 
-    if not packages:
+    if not packages and os.getenv("VIREON_VERBOSE") == "1":
         print("[stack] No dependency files found in repo.")
 
     return packages

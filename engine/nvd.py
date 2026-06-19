@@ -24,7 +24,8 @@ def fetch_nvd_for_stack(stack: dict[str, str], days: int = 90) -> list[dict]:
     """
     api_key = os.getenv("NVD_API_KEY", "")
     if not api_key:
-        print("[nvd] No NVD_API_KEY — skipping NVD (OSV will cover PyPI packages)")
+        if os.getenv("VIREON_VERBOSE") == "1":
+            print("[nvd] No NVD_API_KEY — skipping NVD (OSV will cover PyPI packages)")
         return []
 
     headers = {"Accept": "application/json", "apiKey": api_key}
@@ -62,7 +63,8 @@ def fetch_nvd_for_stack(stack: dict[str, str], days: int = 90) -> list[dict]:
                 print(f"[nvd] Error fetching {pkg}: {e}")
             continue
 
-    print(f"[nvd] {len(results)} additional CVEs from NVD keyword search")
+    if os.getenv("VIREON_VERBOSE") == "1":
+        print(f"[nvd] {len(results)} additional CVEs from NVD keyword search")
     return results
 
 

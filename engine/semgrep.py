@@ -38,8 +38,10 @@ def run_semgrep(repo_path: str, cves: list[dict] | None = None) -> list[dict]:
         List of finding dicts with file, line, rule, message, severity
     """
     if not _semgrep_available():
-        print("[semgrep] semgrep not installed — skipping static analysis")
-        print("[semgrep] Install: pip install semgrep")
+        if os.getenv("VIREON_VERBOSE") == "1":
+            print("[semgrep] semgrep not installed — skipping static analysis")
+        if os.getenv("VIREON_VERBOSE") == "1":
+            print("[semgrep] Install: pip install semgrep")
         return []
 
     # Pick rulesets based on detected ecosystem
@@ -59,7 +61,8 @@ def run_semgrep(repo_path: str, cves: list[dict] | None = None) -> list[dict]:
             seen.add(key)
             deduped.append(f)
 
-    print(f"[semgrep] {len(deduped)} findings across {len({f.get('path') for f in deduped})} files")
+    if os.getenv("VIREON_VERBOSE") == "1":
+        print(f"[semgrep] {len(deduped)} findings across {len({f.get('path') for f in deduped})} files")
     return deduped
 
 
@@ -92,11 +95,13 @@ def _run_ruleset(repo_path: str, ruleset: str) -> list[dict]:
             data = json.loads(result.stdout)
             return data.get("results", [])
     except subprocess.TimeoutExpired:
-        print(f"[semgrep] Timeout on ruleset {ruleset}")
+        if os.getenv("VIREON_VERBOSE") == "1":
+            print(f"[semgrep] Timeout on ruleset {ruleset}")
     except json.JSONDecodeError:
         pass
     except Exception as e:
-        print(f"[semgrep] Error running {ruleset}: {e}")
+        if os.getenv("VIREON_VERBOSE") == "1":
+            print(f"[semgrep] Error running {ruleset}: {e}")
     return []
 
 

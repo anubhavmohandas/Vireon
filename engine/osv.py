@@ -8,6 +8,7 @@ Free, no API key, works for PyPI, npm, Go, Rust, Maven, etc.
 API: https://google.github.io/osv.dev/post-v1-query/
 """
 
+import os
 import re
 import requests
 
@@ -77,7 +78,8 @@ def fetch_osv_for_stack(stack: dict[str, str]) -> list[dict]:
         resp.raise_for_status()
         data = resp.json()
     except Exception as e:
-        print(f"[osv] Query failed: {e}")
+        if os.getenv("VIREON_VERBOSE") == "1":
+            print(f"[osv] Query failed: {e}")
         return []
 
     results_list = data.get("results", [])
@@ -100,7 +102,8 @@ def fetch_osv_for_stack(stack: dict[str, str]) -> list[dict]:
                 seen_ids.add(vid)
                 normalized.append(entry)
 
-    print(f"[osv] {len(normalized)} vulnerabilities found across {len(stack)} packages")
+    if os.getenv("VIREON_VERBOSE") == "1":
+        print(f"[osv] {len(normalized)} vulnerabilities found across {len(stack)} packages")
     return normalized
 
 

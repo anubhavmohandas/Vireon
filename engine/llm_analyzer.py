@@ -141,7 +141,8 @@ Be conservative: only mark as vulnerable=true if a real attacker could exploit i
                 })
 
         except json.JSONDecodeError as e:
-            print(f"[llm_analyzer] JSON parse error for {file_path}: {e}")
+            if os.getenv("VIREON_VERBOSE") == "1":
+                print(f"[llm_analyzer] JSON parse error for {file_path}: {e}")
             # Fallback: mark finding as needing manual review
             for f in file_findings:
                 confirmed.append({
@@ -157,11 +158,13 @@ Be conservative: only mark as vulnerable=true if a real attacker could exploit i
                     "severity": f.get("extra", {}).get("severity", "WARNING"),
                 })
         except Exception as e:
-            print(f"[llm_analyzer] Error analyzing {file_path}: {e}")
+            if os.getenv("VIREON_VERBOSE") == "1":
+                print(f"[llm_analyzer] Error analyzing {file_path}: {e}")
             continue
 
     vuln_count = sum(1 for c in confirmed if c.get("vulnerable"))
-    print(f"[llm_analyzer] {vuln_count}/{len(confirmed)} findings confirmed exploitable")
+    if os.getenv("VIREON_VERBOSE") == "1":
+        print(f"[llm_analyzer] {vuln_count}/{len(confirmed)} findings confirmed exploitable")
     return confirmed
 
 

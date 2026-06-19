@@ -66,7 +66,8 @@ def run_patcher(
     if all_cves:
         dep_bumps = _generate_dep_bumps(client, model, all_cves, repo_path)
 
-    print(f"[patcher] Generated {len(patches)} code patches, {len(dep_bumps)} dep bumps")
+    if os.getenv("VIREON_VERBOSE") == "1":
+        print(f"[patcher] Generated {len(patches)} code patches, {len(dep_bumps)} dep bumps")
     return {"patches": patches, "dep_bumps": dep_bumps}
 
 
@@ -166,7 +167,8 @@ One sentence explaining what you changed.
                 patched_code = result.get("patched_code", "")
                 explanation = result.get("explanation", "")
             except Exception:
-                print(f"[patcher] Could not parse response for {file_path}")
+                if os.getenv("VIREON_VERBOSE") == "1":
+                    print(f"[patcher] Could not parse response for {file_path}")
                 return None
 
         if not patched_code:
@@ -206,7 +208,8 @@ One sentence explaining what you changed.
         }
 
     except Exception as e:
-        print(f"[patcher] Error patching {file_path}: {e}")
+        if os.getenv("VIREON_VERBOSE") == "1":
+            print(f"[patcher] Error patching {file_path}: {e}")
         return None
 
 
@@ -285,7 +288,8 @@ Respond with JSON array:
 
     except Exception as e:
         if os.getenv("VIREON_VERBOSE") == "1":
-            print(f"[patcher] Dep bump LLM error: {e}")
+            if os.getenv("VIREON_VERBOSE") == "1":
+                print(f"[patcher] Dep bump LLM error: {e}")
         return _simple_dep_bumps(all_cves)
 
 

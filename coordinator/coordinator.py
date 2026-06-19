@@ -92,10 +92,12 @@ class Coordinator:
         await coordinator.run()
     """
 
-    def __init__(self, repo_path: str, days: int = 7, db=None):
+    def __init__(self, repo_path: str, days: int = 7, db=None, original_url: str = ""):
         self.repo_path = repo_path
         self.days = days
         self.state = SharedState(repo_path=repo_path, db=db)
+        if original_url:
+            self.state.original_repo_path = original_url
         self._db = db
         self.start_time = None
 

@@ -41,12 +41,14 @@ def run_github_pr(
     # so PRs always target the repo that was actually scanned.
     repo = github_repo or os.getenv("GITHUB_REPO", "")  # format: "owner/repo"
     if github_repo and github_repo != os.getenv("GITHUB_REPO", ""):
-        print(f"[github_pr] Using scanned repo target: {repo}")
+        if os.getenv("VIREON_VERBOSE") == "1":
+            print(f"[github_pr] Using scanned repo target: {repo}")
 
     pr_body = _build_pr_body(patch_result, confirmed, all_cves, test_results, verify_results, repo_path)
 
     if not token or not repo:
-        print("[github_pr] GITHUB_TOKEN/GITHUB_REPO not set — saving PR draft to output/")
+        if os.getenv("VIREON_VERBOSE") == "1":
+            print("[github_pr] GITHUB_TOKEN/GITHUB_REPO not set — saving PR draft to output/")
         draft_path = _save_pr_draft(pr_body)
         return {
             "url": "",
@@ -114,7 +116,8 @@ def run_github_pr(
             }
 
     except ImportError:
-        print("[github_pr] requests not installed")
+        if os.getenv("VIREON_VERBOSE") == "1":
+            print("[github_pr] requests not installed")
         return {"url": "", "number": 0, "skipped": True, "reason": "requests not installed", "pr_body": pr_body}
     except Exception as e:
         print(f"[github_pr] Error: {e}")
@@ -254,7 +257,8 @@ def _get_default_branch(repo_path: str) -> str:
     except Exception:
         pass
 
-    print("[github_pr] Could not determine default branch — falling back to 'main'")
+    if os.getenv("VIREON_VERBOSE") == "1":
+        print("[github_pr] Could not determine default branch — falling back to 'main'")
     return "main"
 
 
@@ -288,9 +292,11 @@ def _resolve_latest_versions(dep_bumps: list[dict]) -> dict[str, str]:
             version = data.get("info", {}).get("version", "")
             if version:
                 resolved[pkg] = version
-                print(f"[github_pr] Resolved {pkg} latest → {version}")
+                if os.getenv("VIREON_VERBOSE") == "1":
+                    print(f"[github_pr] Resolved {pkg} latest → {version}")
         except Exception as e:
-            print(f"[github_pr] Could not resolve latest version for {pkg}: {e}")
+            if os.getenv("VIREON_VERBOSE") == "1":
+                print(f"[github_pr] Could not resolve latest version for {pkg}: {e}")
 
     return resolved
 
@@ -317,7 +323,8 @@ def _apply_dep_bumps(dep_bumps: list[dict], repo_path: str) -> list[str]:
         # No concrete versions — try to resolve 'latest' via PyPI
         pkg_version = _resolve_latest_versions(dep_bumps)
         if not pkg_version:
-            print("[github_pr] dep bumps present but could not resolve versions — skipping requirements update")
+            if os.getenv("VIREON_VERBOSE") == "1":
+                print("[github_pr] dep bumps present but could not resolve versions — skipping requirements update")
             return []
 
     modified: list[str] = []
@@ -339,7 +346,8 @@ def _apply_dep_bumps(dep_bumps: list[dict], repo_path: str) -> list[str]:
             if pkg_name in pkg_version:
                 new_line = f"{pkg_name}>={pkg_version[pkg_name]}\n"
                 if new_line != line:
-                    print(f"[github_pr] Bump {pkg_name} → >={pkg_version[pkg_name]}")
+                    if os.getenv("VIREON_VERBOSE") == "1":
+                        print(f"[github_pr] Bump {pkg_name} → >={pkg_version[pkg_name]}")
                     changed = True
                 new_lines.append(new_line)
             else:
@@ -417,7 +425,8 @@ def _create_branch_and_push(patch_result: dict, repo: str, token: str, repo_path
         patched_files.extend(dep_files)
 
         if not patched_files:
-            print("[github_pr] No files patched and no dep bumps — nothing to commit")
+            if os.getenv("VIREON_VERBOSE") == "1":
+                print("[github_pr] No files patched and no dep bumps — nothing to commit")
             subprocess.run(["git", "checkout", default_branch], cwd=repo_path, capture_output=True)
             return None, default_branch, "no code patches or dep bumps to apply"
 
@@ -461,5 +470,6 @@ def _save_pr_draft(pr_body: str, out_dir: str = _OUT_DIR) -> str:
     path = os.path.join(out_dir, "pr_draft.md")
     with open(path, "w") as f:
         f.write(pr_body)
-    print(f"[github_pr] PR draft saved to {path}")
+    if os.getenv("VIREON_VERBOSE") == "1":
+        print(f"[github_pr] PR draft saved to {path}")
     return path

@@ -28,7 +28,8 @@ def build_graph(repo_path: str, stack: dict[str, str], cves: list[dict]):
     Returns: nx.DiGraph or None if networkx not available
     """
     if not HAS_NETWORKX:
-        print("[graph] networkx not installed — skipping graph build")
+        if os.getenv("VIREON_VERBOSE") == "1":
+            print("[graph] networkx not installed — skipping graph build")
         return None
 
     import networkx as nx
@@ -61,7 +62,8 @@ def build_graph(repo_path: str, stack: dict[str, str], cves: list[dict]):
             if imp in G.nodes:
                 G.add_edge(rel_path, imp, relation="imports")
 
-    print(f"[graph] Built graph: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
+    if os.getenv("VIREON_VERBOSE") == "1":
+        print(f"[graph] Built graph: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
     return G
 
 

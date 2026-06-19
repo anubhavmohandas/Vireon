@@ -134,7 +134,8 @@ def run_verifier(patch_result: dict, confirmed: list[dict], repo_path: str) -> d
 
     # Check semgrep availability
     if not _semgrep_available():
-        print("[verifier] semgrep not installed — skipping re-verification")
+        if os.getenv("VIREON_VERBOSE") == "1":
+            print("[verifier] semgrep not installed — skipping re-verification")
         # Cannot claim anything cleared without actually scanning
         return {
             "vulnerabilities_cleared": 0,

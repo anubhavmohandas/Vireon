@@ -116,13 +116,13 @@ def ask_mode() -> str:
 
 # ── Run pipeline ───────────────────────────────────────────────────────────────
 
-async def run_real(repo_path: str, days: int):
+async def run_real(repo_path: str, days: int, original_url: str = ""):
     from coordinator.coordinator import Coordinator
-    coordinator = Coordinator(repo_path=repo_path, days=days)
+    coordinator = Coordinator(repo_path=repo_path, days=days, original_url=original_url)
     await coordinator.run()
 
 
-async def run_demo(repo_path: str, days: int):
+async def run_demo(repo_path: str, days: int, original_url: str = ""):
     from demo_run import DemoCoordinator
     coordinator = DemoCoordinator(repo_path=repo_path, days=days)
     await coordinator.run()
@@ -176,22 +176,14 @@ def main():
         mode = ask_mode()
 
         # ── Run ────────────────────────────────────────────────────────────────
-        console.print()
-        console.print(Panel(
-            f"[bold]Investigation starting[/bold]\n"
-            f"[dim]Repo:[/dim]  {repo_path}\n"
-            f"[dim]Days:[/dim]  {days}\n"
-            f"[dim]Mode:[/dim]  {mode}",
-            border_style="cyan",
-            padding=(0, 2),
-        ))
-        console.print()
+        # Pass original URL so reports show github.com/... not /var/folders/...
+        original_url = repo_input if is_github_url(repo_input) else repo_path
 
         try:
             if mode == "demo":
-                asyncio.run(run_demo(repo_path, days))
+                asyncio.run(run_demo(repo_path, days, original_url=original_url))
             else:
-                asyncio.run(run_real(repo_path, days))
+                asyncio.run(run_real(repo_path, days, original_url=original_url))
 
         except KeyboardInterrupt:
             console.print("\n[yellow]Investigation interrupted.[/yellow]")
