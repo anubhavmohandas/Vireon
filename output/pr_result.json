@@ -2,6 +2,6 @@
   "url": "",
   "number": 0,
   "skipped": true,
-  "reason": "no code patches generated",
+  "reason": "no code patches or dep bumps to apply",
   "draft_path": "/Users/anubhavmohandas/Documents/Claude/Vireon/engine/../output/pr_draft.md"
 }
