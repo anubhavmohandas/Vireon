@@ -234,11 +234,22 @@ def _generate_dep_bumps(client, model: str, all_cves: list[dict], repo_path: str
         for c in all_cves[:20]
     )
 
+    # Filter requirements to only lines relevant to the CVE packages — avoids
+    # truncating large requirements files and losing unrelated packages.
+    vuln_pkgs = {c["package"].lower().replace("-", "_") for c in all_cves[:20] if c.get("package")}
+    req_lines = req_content.splitlines()
+    relevant_lines = [
+        ln for ln in req_lines
+        if any(pkg in ln.lower().replace("-", "_") for pkg in vuln_pkgs)
+    ]
+    # If nothing matched (unusual normalisation), fall back to first 2000 chars
+    req_excerpt = "\n".join(relevant_lines) if relevant_lines else req_content[:2000]
+
     prompt = f"""You are a security engineer. Given these CVEs affecting dependencies, generate version bumps.
 
-CURRENT requirements.txt:
+CURRENT requirements.txt (relevant packages shown):
 ```
-{req_content[:2000]}
+{req_excerpt}
 ```
 
 CVEs to fix:

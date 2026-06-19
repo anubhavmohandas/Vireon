@@ -120,6 +120,18 @@ class ThreatIntelAgent(BandAgent):
 
         NETWORK_VECTORS = {"NETWORK", "ADJACENT"}
 
+        def _dep_path(pkg: str) -> list[str]:
+            """
+            Return the shortest dependency path from 'repo' to pkg using the
+            real graph edges.  Falls back to a single-hop list if unavailable.
+            """
+            if not _graph_available or G is None or "repo" not in G or pkg not in G:
+                return [pkg]
+            try:
+                return list(nx.shortest_path(G, "repo", pkg))
+            except (nx.NetworkXNoPath, nx.exception.NodeNotFound):
+                return [pkg]
+
         reach_dict = {}
         for cve in relevant:
             m = cve.get("sage_match", {})
@@ -129,13 +141,20 @@ class ThreatIntelAgent(BandAgent):
             vector_reachable = av in NETWORK_VECTORS
             graph_reachable = _in_graph(pkg)
             reachable = vector_reachable and graph_reachable
+
+            if reachable:
+                path = _dep_path(pkg)
+                paths = [{"entry": path[0], "path": path, "depth": len(path) - 1}]
+            else:
+                paths = []
+
             reach_dict[cve_id] = {
-                "cve_id":           cve_id,
-                "package":          pkg,
-                "reachable":        reachable,
-                "attack_vector":    av,
-                "in_dep_graph":     graph_reachable,
-                "paths": [{"entry": "external", "path": ["external", pkg], "depth": 1}] if reachable else [],
+                "cve_id":        cve_id,
+                "package":       pkg,
+                "reachable":     reachable,
+                "attack_vector": av,
+                "in_dep_graph":  graph_reachable,
+                "paths":         paths,
             }
         self.state.reach_results = reach_dict
 
