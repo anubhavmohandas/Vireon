@@ -159,9 +159,9 @@ def run_verifier(patch_result: dict, confirmed: list[dict], repo_path: str) -> d
                     patched_files_abs.append(abs_path)
         scan_targets = patched_files_abs if patched_files_abs else [tmp_dir]
 
-        from engine.semgrep import _semgrep_bin
+        from engine.semgrep import _semgrep_cmd
         result = subprocess.run(
-            [_semgrep_bin(), "--config", "p/owasp-top-ten", "--json", "--quiet"] + scan_targets,
+            _semgrep_cmd() + ["--config", "p/owasp-top-ten", "--json", "--quiet"] + scan_targets,
             capture_output=True, text=True, timeout=120,
         )
 
@@ -340,8 +340,8 @@ def _parse_test_output(output: str, runner: list[str]) -> tuple[int, int, int]:
 
 def _semgrep_available() -> bool:
     try:
-        from engine.semgrep import _semgrep_bin
-        result = subprocess.run([_semgrep_bin(), "--version"], capture_output=True, timeout=5)
+        from engine.semgrep import _semgrep_cmd
+        result = subprocess.run(_semgrep_cmd() + ["--version"], capture_output=True, timeout=15)
         return result.returncode == 0
     except Exception:
         return False

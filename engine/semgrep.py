@@ -67,8 +67,7 @@ def _run_ruleset(repo_path: str, ruleset: str) -> list[dict]:
     """Run a single Semgrep ruleset and return raw findings."""
     try:
         result = subprocess.run(
-            [
-                _semgrep_bin(),
+            _semgrep_cmd() + [
                 "--config", ruleset,
                 "--json",
                 "--quiet",
@@ -127,27 +126,49 @@ def _pick_rulesets(repo_path: str) -> list[str]:
     return list(dict.fromkeys(rulesets))  # deduplicate, preserve order
 
 
-def _semgrep_bin() -> str:
-    """Find the semgrep binary — checks venv, shutil.which, fallback."""
-    import shutil
-    # Check same venv as this Python process
+def _semgrep_cmd() -> list[str]:
+    """
+    Return the command prefix to invoke semgrep.
+
+    Prefers `python -m semgrep` (same venv, always works if the package is
+    installed) over a bare binary path.  Falls back to the binary for envs
+    where semgrep is installed system-wide rather than as a Python package.
+    """
     import sys
+    import shutil
+
+    # Best: same interpreter, guaranteed correct venv
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "semgrep", "--version"],
+            capture_output=True, timeout=10,
+        )
+        if result.returncode == 0:
+            return [sys.executable, "-m", "semgrep"]
+    except Exception:
+        pass
+
+    # Fallback: binary in venv bin dir
     venv_bin = os.path.join(os.path.dirname(sys.executable), "semgrep")
     if os.path.isfile(venv_bin):
-        return venv_bin
+        return [venv_bin]
+
+    # Last resort: PATH
     found = shutil.which("semgrep")
-    if found:
-        return found
-    return "semgrep"  # fallback, will fail gracefully
+    return [found] if found else ["semgrep"]
+
+
+def _semgrep_bin() -> str:
+    """Legacy helper — returns first element of _semgrep_cmd()."""
+    return _semgrep_cmd()[0]
 
 
 def _semgrep_available() -> bool:
-    """Check if semgrep is installed."""
+    """Check if semgrep is installed and runnable."""
     try:
         result = subprocess.run(
-            [_semgrep_bin(), "--version"],
-            capture_output=True,
-            timeout=5,
+            _semgrep_cmd() + ["--version"],
+            capture_output=True, timeout=15,
         )
         return result.returncode == 0
     except Exception:

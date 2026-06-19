@@ -118,7 +118,10 @@ class ThreatIntelAgent(BandAgent):
             except (nx.NetworkXError, nx.exception.NodeNotFound):
                 return pkg in G
 
-        NETWORK_VECTORS = {"NETWORK", "ADJACENT"}
+        # UNKNOWN means the source didn't provide CVSS vector data.
+        # Treat as NETWORK (worst-case / conservative) so we don't silently
+        # drop CVEs just because OSV omitted the vector string.
+        NETWORK_VECTORS = {"NETWORK", "ADJACENT", "UNKNOWN"}
 
         def _dep_path(pkg: str) -> list[str]:
             """
