@@ -2,7 +2,6 @@
   "passed": 0,
   "failed": 0,
   "errors": 0,
-  "test_output": "/Users/anubhavmohandas/Documents/Claude/Vireon/myvenv/bin/python: No module named pytest\n",
-  "skipped": false,
-  "return_code": 1
+  "test_output": "No patches to apply",
+  "skipped": true
 }

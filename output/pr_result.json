@@ -1,7 +1,6 @@
 {
-  "url": "",
-  "number": 0,
-  "skipped": true,
-  "reason": "git push failed: remote: Permission to anubhavmohandas/CyberTrace.git denied to anubhavmohandas.\nfatal: unable to acc",
-  "draft_path": "/Users/anubhavmohandas/Documents/Claude/Vireon/engine/../output/pr_draft.md"
+  "url": "https://github.com/anubhavmohandas/CyberTrace/pull/21",
+  "number": 21,
+  "skipped": false,
+  "branch_name": "vireon/security-fix-20260619-174634"
 }

@@ -1,6 +1,6 @@
 {
-  "vulnerabilities_cleared": 1,
+  "vulnerabilities_cleared": 0,
   "vulnerabilities_remaining": 0,
   "details": [],
-  "skipped": false
+  "skipped": true
 }
