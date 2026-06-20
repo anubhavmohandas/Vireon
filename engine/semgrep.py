@@ -14,16 +14,25 @@ import tempfile
 from pathlib import Path
 
 
-# Semgrep rulesets to run — ordered by signal quality
-RULESETS = [
-    "p/python",           # Python security rules
-    "p/javascript",       # JS/Node security rules
-    "p/owasp-top-ten",    # OWASP Top 10
-    "p/secrets",          # Hardcoded secrets/keys
-    "p/sql-injection",    # SQLi
-    "p/command-injection",# Command injection
-    "p/xss",              # Cross-site scripting
+# Language-agnostic security packs — ALWAYS run. Cheap, high-signal, and the LLM
+# exploitability gate (measured 0% false-positive rate) filters their noise
+# downstream, so casting a wide net here is safe.
+_SECURITY_RULESETS = [
+    "p/owasp-top-ten",     # OWASP Top 10
+    "p/secrets",           # Hardcoded secrets/keys
+    "p/sql-injection",     # SQLi
+    "p/command-injection", # Command injection
+    "p/xss",               # Cross-site scripting
 ]
+
+# Language packs — added only when that language is detected in the repo.
+_LANG_RULESETS = {
+    "python":     "p/python",
+    "javascript": "p/javascript",
+}
+
+# Full catalogue (kept for reference / external callers).
+RULESETS = list(_LANG_RULESETS.values()) + _SECURITY_RULESETS
 
 
 def run_semgrep(repo_path: str, cves: list[dict] | None = None) -> list[dict]:
@@ -106,27 +115,32 @@ def _run_ruleset(repo_path: str, ruleset: str) -> list[dict]:
 
 
 def _pick_rulesets(repo_path: str) -> list[str]:
-    """Pick relevant rulesets based on what's in the repo."""
+    """
+    Detected language pack(s) + ALL security packs.
+
+    Previously this dropped OWASP for repos with >=100 files and never ran the
+    sql/command-injection/xss packs at all (defined in RULESETS but unused) — a
+    silent coverage hole on exactly the large web apps that need them most.
+
+    Coverage is favoured over speed: semgrep's own --timeout / --max-memory and
+    the directory excludes bound the cost, and the LLM gate filters the extra
+    findings, so a wider net does not mean a noisier result for the user.
+    """
     path = Path(repo_path)
-    rulesets = []
+    rulesets: list[str] = []
 
-    # Python — use p/python which is fast and comprehensive
+    # Python
     py_files = list(path.rglob("*.py"))
-    if py_files or (path / "requirements.txt").exists():
-        rulesets.append("p/python")
+    if py_files or (path / "requirements.txt").exists() or (path / "pyproject.toml").exists():
+        rulesets.append(_LANG_RULESETS["python"])
 
-    # JavaScript/Node
+    # JavaScript / TypeScript / Node
     js_files = list(path.rglob("*.js")) + list(path.rglob("*.ts"))
     if js_files or (path / "package.json").exists():
-        rulesets.append("p/javascript")
+        rulesets.append(_LANG_RULESETS["javascript"])
 
-    # Always check secrets — fast rule, high value
-    rulesets.append("p/secrets")
-
-    # Only add heavy rulesets if repo is small enough (< 100 files)
-    total_files = len(py_files) + len(js_files)
-    if total_files < 100:
-        rulesets.append("p/owasp-top-ten")
+    # Security packs always run, regardless of repo size.
+    rulesets.extend(_SECURITY_RULESETS)
 
     return list(dict.fromkeys(rulesets))  # deduplicate, preserve order
 
