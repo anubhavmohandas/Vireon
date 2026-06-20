@@ -56,11 +56,21 @@ async def generate_summary(state: SharedState, elapsed_s: float) -> str:
     if threat_r:
         ft.add_row("CVEs fetched",  str(threat_r.metadata.get("cves_fetched",  "—")))
         ft.add_row("CVEs relevant", str(threat_r.metadata.get("cves_relevant", "—")))
-        ft.add_row("Reachable",     str(threat_r.metadata.get("reachable_cves","—")))
+        # This is dependency-tree presence + network attack vector, NOT code-level
+        # reachability. Labelled honestly so "67 reachable / 0 exploitable" doesn't
+        # read as a contradiction.
+        ft.add_row("In dep tree",   str(threat_r.metadata.get("reachable_cves","—")))
     if static_r:
         ft.add_row("Semgrep hits",  str(static_r.metadata.get("findings_count","—")))
     if exploit_r:
-        ft.add_row("LLM confirmed", str(exploit_r.metadata.get("confirmed_count","—")))
+        m = exploit_r.metadata
+        ft.add_row("Exploitable",   str(m.get("confirmed_count", "—")))
+        # Surface conservatism: how many Semgrep hits the LLM reviewed and rejected.
+        reviewed = m.get("reviewed_count")
+        confirmed_n = m.get("confirmed_count")
+        if isinstance(reviewed, int) and isinstance(confirmed_n, int):
+            not_exploitable = max(0, reviewed - confirmed_n)
+            ft.add_row("Reviewed, not exploitable", str(not_exploitable))
     _con.print(ft)
     _con.print()
 

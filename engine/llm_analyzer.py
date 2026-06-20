@@ -135,21 +135,22 @@ Be conservative: only mark as vulnerable=true if a real attacker could exploit i
             for r in results:
                 if not isinstance(r, dict):
                     continue
-                # Match back to original finding
                 check_id = r.get("check_id", "")
-                matched = next(
-                    (f for f in file_findings if f.get("check_id", "") == check_id),
-                    file_findings[0] if file_findings else {},
-                )
+                line = r.get("line", 0)
+                # Match back to the ORIGINAL finding by check_id, then by line.
+                # Critically: do NOT fall back to file_findings[0] — that borrowed
+                # an unrelated finding's CVE id and printed e.g. "CVE-2024-35195"
+                # on an open-redirect. No match → no CVE.
+                matched = _match_finding(check_id, line, file_findings)
                 try:
                     conf = float(r.get("confidence", 0.5))
                 except (TypeError, ValueError):
                     conf = 0.5
                 confirmed.append({
-                    "cve_id": matched.get("cve_id", ""),
-                    "check_id": check_id,
+                    "cve_id": matched.get("cve_id", ""),   # "" when unmatched — honest
+                    "check_id": check_id or matched.get("check_id", ""),
                     "path": file_path,
-                    "line": r.get("line", matched.get("start", {}).get("line", 0)),
+                    "line": line or matched.get("start", {}).get("line", 0),
                     "vulnerable": bool(r.get("vulnerable", False)),
                     "confidence": max(0.0, min(1.0, conf)),
                     "reason": str(r.get("reason", ""))[:300],
@@ -167,6 +168,31 @@ Be conservative: only mark as vulnerable=true if a real attacker could exploit i
     if os.getenv("VIREON_VERBOSE") == "1":
         print(f"[llm_analyzer] {vuln_count}/{len(confirmed)} findings confirmed exploitable")
     return confirmed
+
+
+def _match_finding(check_id: str, line, file_findings: list[dict]) -> dict:
+    """
+    Map an LLM result back to the Semgrep finding it refers to.
+
+    Order: exact check_id → same start line → {} (no match).
+
+    Returns {} rather than guessing, so callers inherit NO cve_id/severity from
+    an unrelated finding. Borrowing file_findings[0] is what produced the
+    wrong-CVE labels (a requests CVE printed on an open redirect).
+    """
+    if check_id:
+        for f in file_findings:
+            if f.get("check_id", "") == check_id:
+                return f
+    try:
+        ln = int(line)
+    except (TypeError, ValueError):
+        ln = 0
+    if ln:
+        for f in file_findings:
+            if f.get("start", {}).get("line") == ln:
+                return f
+    return {}
 
 
 def save_confirmed(confirmed: list[dict], out_dir: str = _OUT_DIR) -> str:
