@@ -79,11 +79,19 @@ def clone_repo(url: str) -> str:
     tmpdir = tempfile.mkdtemp(prefix="vireon-")
     console.print(f"\n[dim]Cloning[/dim] [cyan]{display_url}[/cyan] [dim]→ {tmpdir}[/dim]")
 
-    result = subprocess.run(
-        ["git", "clone", "--depth", "1", clone_url, tmpdir],
-        capture_output=True,
-        text=True,
-    )
+    # "--" terminates option parsing so a hostile URL (e.g. one starting with
+    # "--upload-pack=") can't be smuggled in as a git flag. Bounded by a timeout.
+    try:
+        result = subprocess.run(
+            ["git", "clone", "--depth", "1", "--", clone_url, tmpdir],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except subprocess.TimeoutExpired:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        console.print("[red]Clone failed:[/red] timed out after 120s")
+        return ""
 
     if result.returncode != 0:
         shutil.rmtree(tmpdir, ignore_errors=True)

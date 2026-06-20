@@ -80,6 +80,7 @@ class SharedState:
         self.graph = None                           # NetworkX graph from synapse
         self.findings: list[dict] = []              # semgrep findings
         self.confirmed: list[dict] = []             # analyzer-confirmed vulns
+        self.attack_paths: list[dict] = []          # real entry→sink attack paths
         self.reach_results: dict = {}               # reachability analysis
         self.patch_result: dict = {}                # patcher output
         self.test_results: dict = {}                # test runner output
@@ -108,6 +109,25 @@ class SharedState:
         # Confidence evolution — ordered list of (agent, confidence) snapshots
         # Used for the "confidence rising/falling" demo visualization
         self._confidence_evolution: list[dict] = []
+
+    # ── Exploitability gate ─────────────────────────────────────────────────────
+
+    @property
+    def exploitable(self) -> list[dict]:
+        """
+        The subset of ``confirmed`` that the analyzer marked actually exploitable
+        (``vulnerable == True``).
+
+        IMPORTANT: ``confirmed`` holds EVERY finding the Exploitability Agent
+        reviewed — including ones it decided were NOT exploitable (it writes them
+        with ``vulnerable=False`` for transparency). So ``confirmed`` is almost
+        always non-empty even when nothing is exploitable.
+
+        Gate the remediation/PR pipeline on THIS property, never on
+        ``bool(confirmed)`` — otherwise Vireon patches and raises PRs for findings
+        the LLM explicitly said were not exploitable.
+        """
+        return [c for c in self.confirmed if isinstance(c, dict) and c.get("vulnerable")]
 
     # ── Results ───────────────────────────────────────────────────────────────
 
@@ -248,11 +268,9 @@ class SharedState:
                 r = self._results.get(agent)
                 if r is None:
                     continue
-                if w < 0:
-                    # Challenger: higher confidence means more doubt → subtract
-                    score += w * r.confidence
-                else:
-                    score += w * r.confidence
+                # A negative weight (the challenger) subtracts from the score:
+                # the more confident the challenger, the more doubt it casts.
+                score += w * r.confidence
                 total_w += abs(w)
             if total_w == 0:
                 return 0.0

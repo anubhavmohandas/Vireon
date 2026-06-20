@@ -152,17 +152,15 @@ Repo: {self.state.repo_path}
                 },
             )
 
-        # ── JSON parse ────────────────────────────────────────────────────────
-        challenges = []
+        # ── JSON parse (truncation-tolerant) ───────────────────────────────────
+        from engine.json_utils import extract_json_array
+        challenges = extract_json_array(raw)
+        # Only a true parse error if the model returned nothing JSON-shaped.
+        # An empty/truncated array flows to the "no counter evidence" path below,
+        # which is the safe direction for a challenger (it never fabricates doubt).
         parse_error = None
-        try:
-            match = re.search(r'\[.*\]', raw, re.DOTALL)
-            if match:
-                challenges = json.loads(match.group())
-            else:
-                parse_error = "No JSON array found in LLM response"
-        except Exception as e:
-            parse_error = str(e)[:200]
+        if not challenges and not re.search(r"[\[{]", raw or ""):
+            parse_error = "No JSON found in LLM response"
 
         if parse_error:
             self.state.challenger_objection = f"PARSE_ERROR: {parse_error}"

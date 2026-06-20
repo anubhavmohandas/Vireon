@@ -240,12 +240,19 @@ class DemoCoordinator(Coordinator):
         )
         await exploit_agent.run()
 
-        if not state.confirmed:
-            # Fallback: treat all findings as confirmed for demo
-            print("\n[DEMO] LLM returned no confirmed vulns — using demo fallback\n")
+        if not state.exploitable:
+            # Fallback: treat all findings as confirmed exploitable for demo.
+            # `vulnerable=True` is REQUIRED — the patcher, verifier, PR builder and
+            # the coordinator gate all key off it. Without it the demo silently
+            # produces zero code patches.
+            print("\n[DEMO] LLM returned no exploitable vulns — using demo fallback\n")
             state.confirmed = [
                 {
                     "cve_id":           f["cve_id"],
+                    "check_id":         f.get("check_id", ""),
+                    "path":             f.get("path", ""),
+                    "line":             f.get("start", {}).get("line", 0),
+                    "vulnerable":       True,
                     "reason":           f["extra"]["message"],
                     "attack_vector":    "NETWORK",
                     "affected_functions": [f["path"]],
@@ -254,6 +261,15 @@ class DemoCoordinator(Coordinator):
                 }
                 for f in DEMO_FINDINGS
             ]
+
+        # Build real attack paths for whatever ended up confirmed (covers the
+        # fallback branch, which bypasses the agent's own attack-path build).
+        try:
+            from engine.attack_path import attach_attack_paths, build_attack_paths
+            state.confirmed = attach_attack_paths(state.confirmed, self.repo_path, graph=state.graph)
+            state.attack_paths = build_attack_paths(state.confirmed, self.repo_path, graph=state.graph)
+        except Exception:
+            pass
 
         # ── Phase 3: Challenger (real LLM call) ──────────────────────────────
         print("\n[Phase 3] Challenger Debate (LLM)\n")

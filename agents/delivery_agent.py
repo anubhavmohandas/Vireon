@@ -55,6 +55,7 @@ class DeliveryAgent(BandAgent):
 
     def _run_sync(self) -> AgentResult:
         from engine.github_pr import run_github_pr, save_pr_result
+        from engine.graph import cves_from_graph
 
         patch_result = self.state.patch_result
         confirmed = self.state.confirmed
@@ -72,20 +73,7 @@ class DeliveryAgent(BandAgent):
                 metadata={"reason": "No verified patch to submit"},
             )
 
-        all_cves = []
-        if G is not None:
-            seen = set()
-            for node, data in G.nodes(data=True):
-                if data.get("type") == "cve":
-                    cve_id = data.get("cve_id", node)
-                    if cve_id not in seen:
-                        seen.add(cve_id)
-                        all_cves.append({
-                            "cve_id": cve_id,
-                            "package": data.get("package", ""),
-                            "affected_range": data.get("affected_range", ""),
-                            "severity": data.get("severity", "UNKNOWN"),
-                        })
+        all_cves = cves_from_graph(G)
 
         pr_result = run_github_pr(
             patch_result=patch_result,

@@ -120,20 +120,19 @@ Original confirmed vulnerabilities:
 
         raw = llm_call(prompt, system=self.system_prompt, max_tokens=1500)
 
-        import json, re
-        decisions = []
-        try:
-            match = re.search(r'\[.*\]', raw, re.DOTALL)
-            if match:
-                decisions = json.loads(match.group())
-        except Exception:
-            decisions = []
+        from engine.json_utils import extract_json_array
+        decisions = extract_json_array(raw)
+        parsed_ok = bool(decisions)
 
         approved = [d for d in decisions if d.get("decision") == "APPROVED"]
         rejected = [d for d in decisions if d.get("decision") == "REJECTED"]
         blocking = [d for d in rejected if d.get("severity") == "blocking"]
 
-        # All-approved or no blocking rejections → pass
+        # All-approved or no blocking rejections → pass.
+        # NOTE: if the review couldn't be parsed at all (parsed_ok=False) we let
+        # the patch through to keep the pipeline moving, but we record it loudly
+        # (status REVIEW_UNPARSED) instead of silently approving — a reviewer can
+        # see the gate didn't actually run.
         overall_approved = len(blocking) == 0
 
         self.state.compliance_approved = overall_approved
@@ -154,6 +153,13 @@ Original confirmed vulnerabilities:
             verdict = "rejected"
             confidence = 0.85
 
+        # Couldn't parse a review → don't claim a clean approval.
+        if not parsed_ok:
+            confidence = 0.4
+            overall_label = "REVIEW_UNPARSED"
+        else:
+            overall_label = "APPROVED" if overall_approved else "REJECTED"
+
         return AgentResult(
             agent=self.name,
             verdict=verdict,
@@ -163,6 +169,7 @@ Original confirmed vulnerabilities:
                 "approved_count": len(approved),
                 "rejected_count": len(rejected),
                 "blocking_rejections": len(blocking),
-                "overall": "APPROVED" if overall_approved else "REJECTED",
+                "overall": overall_label,
+                "review_parsed": parsed_ok,
             },
         )

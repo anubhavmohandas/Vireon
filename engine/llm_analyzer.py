@@ -110,53 +110,54 @@ Be conservative: only mark as vulnerable=true if a real attacker could exploit i
                 messages=[{"role": "user", "content": prompt}],
             )
             raw = response.choices[0].message.content.strip()
-            # Extract JSON from markdown code block if needed
-            if "```json" in raw:
-                raw = raw.split("```json")[1].split("```")[0].strip()
-            elif "```" in raw:
-                raw = raw.split("```")[1].split("```")[0].strip()
+            # Truncation-tolerant extraction (handles ```json fences + cut-off arrays)
+            from engine.json_utils import extract_json_array
+            results = extract_json_array(raw)
 
-            results = json.loads(raw)
-            if not isinstance(results, list):
-                results = [results]
+            if not results:
+                # Couldn't parse anything — mark findings for manual review rather
+                # than silently dropping them.
+                for f in file_findings:
+                    confirmed.append({
+                        "cve_id": "",
+                        "check_id": f.get("check_id", ""),
+                        "path": file_path,
+                        "line": f.get("start", {}).get("line", 0),
+                        "vulnerable": False,
+                        "confidence": 0.3,
+                        "reason": "LLM analysis failed — manual review needed",
+                        "attack_vector": "",
+                        "cwe": "",
+                        "severity": f.get("extra", {}).get("severity", "WARNING"),
+                    })
+                continue
 
             for r in results:
+                if not isinstance(r, dict):
+                    continue
                 # Match back to original finding
                 check_id = r.get("check_id", "")
                 matched = next(
                     (f for f in file_findings if f.get("check_id", "") == check_id),
                     file_findings[0] if file_findings else {},
                 )
+                try:
+                    conf = float(r.get("confidence", 0.5))
+                except (TypeError, ValueError):
+                    conf = 0.5
                 confirmed.append({
                     "cve_id": matched.get("cve_id", ""),
                     "check_id": check_id,
                     "path": file_path,
                     "line": r.get("line", matched.get("start", {}).get("line", 0)),
-                    "vulnerable": r.get("vulnerable", False),
-                    "confidence": float(r.get("confidence", 0.5)),
-                    "reason": r.get("reason", "")[:300],
-                    "attack_vector": r.get("attack_vector", "")[:300],
+                    "vulnerable": bool(r.get("vulnerable", False)),
+                    "confidence": max(0.0, min(1.0, conf)),
+                    "reason": str(r.get("reason", ""))[:300],
+                    "attack_vector": str(r.get("attack_vector", ""))[:300],
                     "cwe": r.get("cwe", ""),
                     "severity": matched.get("extra", {}).get("severity", "WARNING"),
                 })
 
-        except json.JSONDecodeError as e:
-            if os.getenv("VIREON_VERBOSE") == "1":
-                print(f"[llm_analyzer] JSON parse error for {file_path}: {e}")
-            # Fallback: mark finding as needing manual review
-            for f in file_findings:
-                confirmed.append({
-                    "cve_id": "",
-                    "check_id": f.get("check_id", ""),
-                    "path": file_path,
-                    "line": f.get("start", {}).get("line", 0),
-                    "vulnerable": False,
-                    "confidence": 0.3,
-                    "reason": "LLM analysis failed — manual review needed",
-                    "attack_vector": "",
-                    "cwe": "",
-                    "severity": f.get("extra", {}).get("severity", "WARNING"),
-                })
         except Exception as e:
             if os.getenv("VIREON_VERBOSE") == "1":
                 print(f"[llm_analyzer] Error analyzing {file_path}: {e}")

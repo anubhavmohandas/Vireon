@@ -71,6 +71,16 @@ class InvestigationRepo:
         patched_ok = (by_agent.get("verification") or {}).get("verdict") == "confirmed"
         dismissed_count = (by_agent.get("challenger") or {}).get("metadata", {}).get("dismissed", 0)
 
+        # Index exploitability evidence by rule (check_id) so static findings can
+        # be annotated with the real attack path the Exploitability Agent built.
+        exploit_by_rule: dict[str, dict] = {}
+        exploit = by_agent.get("exploitability")
+        if exploit:
+            for ev in exploit.get("evidence", []):
+                rule = ev.get("check_id", "")
+                if rule:
+                    exploit_by_rule[rule] = ev
+
         vulns: list[dict] = []
 
         # ── CVEs from threat intel — one entry per unique package ─────────────
@@ -113,15 +123,35 @@ class InvestigationRepo:
                 line = ev.get("line", "")
                 msg = ev.get("message", rule)
                 loc = f"{file_}:{line}" if line else file_
-                vulns.append({
+
+                # Annotate with the real attack path if this rule was confirmed
+                # exploitable (entry point + impact, surfaced via reachable_via/fix).
+                exp = exploit_by_rule.get(rule)
+                reachable_via = None
+                fix = None
+                status = "patched" if patched_ok else "open"
+                if exp and exp.get("vulnerable"):
+                    reachable_via = exp.get("entry_label") or None
+                    impact = exp.get("impact") or ""
+                    if impact:
+                        fix = f"Impact if exploited: {impact}"
+                    if not patched_ok:
+                        status = "confirmed"
+
+                vuln = {
                     "id": rule,
                     "title": msg or rule,
                     "severity": "warning",
                     "location": loc,
-                    "status": "patched" if patched_ok else "open",
+                    "status": status,
                     "confidence": static.get("confidence", 0.5),
                     "source": "Semgrep",
-                })
+                }
+                if reachable_via:
+                    vuln["reachable_via"] = reachable_via
+                if fix:
+                    vuln["fix"] = fix
+                vulns.append(vuln)
 
         # Challenger-dismissed findings → "mitigated" (apply to last N static entries)
         if dismissed_count and vulns:

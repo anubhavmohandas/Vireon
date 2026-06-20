@@ -1,26 +1,370 @@
 [
   {
-    "cve_id": "",
-    "check_id": "python.lang.security.insecure-hash-algorithms-md5.insecure-hash-algorithm-md5",
-    "path": "/var/folders/gx/n9tlmwfd08l_llwtcns17_xh0000gn/T/vireon-bj5iesgl/cybertrace/modules/base.py",
-    "line": 244,
-    "vulnerable": false,
-    "confidence": 0.3,
-    "reason": "The code snippet provided does not show any usage of the MD5 hash function. The warning might be a false positive or related to a part of the code not included in the excerpt.",
-    "attack_vector": "N/A",
-    "cwe": "N/A",
-    "severity": "WARNING"
+    "cve_id": "CVE-2024-35195",
+    "check_id": "python.requests.security.no-auth-over-http.no-auth-over-http",
+    "path": "app/client.py",
+    "line": 42,
+    "vulnerable": true,
+    "confidence": 0.9,
+    "reason": "Disabling SSL verification makes the application susceptible to Man-in-the-Middle (MITM) attacks, where an attacker can intercept and modify the traffic.",
+    "attack_vector": "An attacker positions themselves between the client and the server, intercepts the HTTP request, and modifies the response or injects malicious content.",
+    "cwe": "CWE-297",
+    "severity": "WARNING",
+    "attack_path": {
+      "cve_id": "CVE-2024-35195",
+      "check_id": "python.requests.security.no-auth-over-http.no-auth-over-http",
+      "file": "app/client.py",
+      "line": 42,
+      "reachable": false,
+      "entry_point": {
+        "kind": "unknown",
+        "function": "",
+        "file": "app/client.py"
+      },
+      "source": null,
+      "sink_function": "",
+      "sink": {
+        "file": "app/client.py",
+        "line": 42,
+        "code": "",
+        "check_id": "python.requests.security.no-auth-over-http.no-auth-over-http",
+        "cwe": "CWE-297"
+      },
+      "steps": [
+        {
+          "label": "Vulnerable sink (python.requests.security.no-auth-over-http.no-auth-over-http)",
+          "file": "app/client.py",
+          "line": 42,
+          "code": ""
+        }
+      ],
+      "impact": "TLS verification disabled \u2014 man-in-the-middle of all traffic",
+      "summary": "Untrusted input  \u2192  client.py:42  \u2192  TLS verification disabled \u2014 man-in-the-middle of all traffic",
+      "narrative": [
+        "1. Vulnerable sink (python.requests.security.no-auth-over-http.no-auth-over-http) (app/client.py:42)"
+      ]
+    }
   },
   {
-    "cve_id": "",
-    "check_id": "python.lang.security.insecure-hash-algorithms-md5.insecure-hash-algorithm-md5",
-    "path": "/var/folders/gx/n9tlmwfd08l_llwtcns17_xh0000gn/T/vireon-bj5iesgl/cybertrace/modules/image_module.py",
-    "line": 522,
-    "vulnerable": false,
-    "confidence": 0.6,
-    "reason": "While MD5 is considered insecure for cryptographic purposes due to its vulnerability to collisions, the context here is likely for file integrity checks or hash lookups, which may not require cryptographic strength. However, it is still recommended to use a more secure hash function like SHA-256.",
-    "attack_vector": "An attacker could potentially craft two different files that produce the same MD5 hash, leading to false positives in hash-based lookups or integrity checks.",
-    "cwe": "CWE-327",
-    "severity": "WARNING"
+    "cve_id": "CVE-2024-35195",
+    "check_id": "python.requests.security.proxy-credentials-leak.proxy-credentials-leak",
+    "path": "app/client.py",
+    "line": 52,
+    "vulnerable": true,
+    "confidence": 0.85,
+    "reason": "Using a proxy without proper handling of redirects can lead to the leakage of proxy authentication credentials, especially if the redirect is to an untrusted domain.",
+    "attack_vector": "An attacker crafts a URL that triggers a redirect to an untrusted domain, causing the client to send the proxy credentials in the redirected request.",
+    "cwe": "CWE-311",
+    "severity": "WARNING",
+    "attack_path": {
+      "cve_id": "CVE-2024-35195",
+      "check_id": "python.requests.security.proxy-credentials-leak.proxy-credentials-leak",
+      "file": "app/client.py",
+      "line": 52,
+      "reachable": false,
+      "entry_point": {
+        "kind": "unknown",
+        "function": "",
+        "file": "app/client.py"
+      },
+      "source": null,
+      "sink_function": "",
+      "sink": {
+        "file": "app/client.py",
+        "line": 52,
+        "code": "",
+        "check_id": "python.requests.security.proxy-credentials-leak.proxy-credentials-leak",
+        "cwe": "CWE-311"
+      },
+      "steps": [
+        {
+          "label": "Vulnerable sink (python.requests.security.proxy-credentials-leak.proxy-credentials-leak)",
+          "file": "app/client.py",
+          "line": 52,
+          "code": ""
+        }
+      ],
+      "impact": "Open redirect \u2014 phishing and OAuth token theft",
+      "summary": "Untrusted input  \u2192  client.py:52  \u2192  Open redirect \u2014 phishing and OAuth token theft",
+      "narrative": [
+        "1. Vulnerable sink (python.requests.security.proxy-credentials-leak.proxy-credentials-leak) (app/client.py:52)"
+      ]
+    }
+  },
+  {
+    "cve_id": "CVE-2024-35195",
+    "check_id": "python.requests.security.no-auth-over-http.no-auth-over-http",
+    "path": "app/client.py",
+    "line": 62,
+    "vulnerable": true,
+    "confidence": 0.9,
+    "reason": "Disabling SSL verification in the POST request also exposes the application to Man-in-the-Middle (MITM) attacks, allowing an attacker to intercept and modify the data being sent.",
+    "attack_vector": "An attacker intercepts the POST request, modifies the JSON data, and resends it to the server, potentially altering the intended operation.",
+    "cwe": "CWE-297",
+    "severity": "WARNING",
+    "attack_path": {
+      "cve_id": "CVE-2024-35195",
+      "check_id": "python.requests.security.no-auth-over-http.no-auth-over-http",
+      "file": "app/client.py",
+      "line": 62,
+      "reachable": false,
+      "entry_point": {
+        "kind": "unknown",
+        "function": "",
+        "file": "app/client.py"
+      },
+      "source": null,
+      "sink_function": "",
+      "sink": {
+        "file": "app/client.py",
+        "line": 62,
+        "code": "",
+        "check_id": "python.requests.security.no-auth-over-http.no-auth-over-http",
+        "cwe": "CWE-297"
+      },
+      "steps": [
+        {
+          "label": "Vulnerable sink (python.requests.security.no-auth-over-http.no-auth-over-http)",
+          "file": "app/client.py",
+          "line": 62,
+          "code": ""
+        }
+      ],
+      "impact": "TLS verification disabled \u2014 man-in-the-middle of all traffic",
+      "summary": "Untrusted input  \u2192  client.py:62  \u2192  TLS verification disabled \u2014 man-in-the-middle of all traffic",
+      "narrative": [
+        "1. Vulnerable sink (python.requests.security.no-auth-over-http.no-auth-over-http) (app/client.py:62)"
+      ]
+    }
+  },
+  {
+    "cve_id": "CVE-2024-6345",
+    "check_id": "python.lang.security.insecure-eval-use.insecure-eval-use",
+    "path": "app/executor.py",
+    "line": 17,
+    "vulnerable": true,
+    "confidence": 1.0,
+    "reason": "The use of `eval()` on user-controlled input is highly exploitable and can lead to Remote Code Execution (RCE).",
+    "attack_vector": "Attacker sends a crafted string as `user_input` to the `run_expression` function, which is then evaluated.",
+    "cwe": "CWE-95",
+    "severity": "ERROR",
+    "attack_path": {
+      "cve_id": "CVE-2024-6345",
+      "check_id": "python.lang.security.insecure-eval-use.insecure-eval-use",
+      "file": "app/executor.py",
+      "line": 17,
+      "reachable": false,
+      "entry_point": {
+        "kind": "function",
+        "function": "load_config",
+        "file": "app/executor.py",
+        "line": 16,
+        "params": [
+          "config_str"
+        ]
+      },
+      "source": {
+        "description": "parameter 'config_str'",
+        "file": "app/executor.py",
+        "line": 16,
+        "code": "def load_config(config_str: str) -> dict:"
+      },
+      "sink_function": "load_config",
+      "sink": {
+        "file": "app/executor.py",
+        "line": 17,
+        "code": "\"\"\"Load YAML configuration from string.\"\"\"",
+        "check_id": "python.lang.security.insecure-eval-use.insecure-eval-use",
+        "cwe": "CWE-95"
+      },
+      "steps": [
+        {
+          "label": "Call load_config(config_str)",
+          "file": "app/executor.py",
+          "line": 16,
+          "code": "def load_config(config_str)"
+        },
+        {
+          "label": "Tainted input: parameter 'config_str'",
+          "file": "app/executor.py",
+          "line": 16,
+          "code": "def load_config(config_str: str) -> dict:"
+        },
+        {
+          "label": "Vulnerable sink (python.lang.security.insecure-eval-use.insecure-eval-use)",
+          "file": "app/executor.py",
+          "line": 17,
+          "code": "\"\"\"Load YAML configuration from string.\"\"\""
+        }
+      ],
+      "impact": "Remote code execution \u2014 attacker runs arbitrary Python on the host",
+      "summary": "Caller \u2192 load_config(config_str)  \u2192  parameter 'config_str'  \u2192  executor.py:17  \u2192  Remote code execution \u2014 attacker runs arbitrary Python on the host",
+      "narrative": [
+        "1. Call load_config(config_str) (app/executor.py:16)",
+        "2. Tainted input: parameter 'config_str' (app/executor.py:16)",
+        "3. Vulnerable sink (python.lang.security.insecure-eval-use.insecure-eval-use) (app/executor.py:17)"
+      ]
+    }
+  },
+  {
+    "cve_id": "CVE-2024-6345",
+    "check_id": "python.lang.security.yaml-safe-load.yaml-safe-load",
+    "path": "app/executor.py",
+    "line": 24,
+    "vulnerable": true,
+    "confidence": 1.0,
+    "reason": "Using `yaml.load()` without specifying a safe loader can lead to arbitrary code execution via YAML deserialization.",
+    "attack_vector": "Attacker sends a crafted YAML string as `config_str` to the `load_config` function, which can include malicious code.",
+    "cwe": "CWE-502",
+    "severity": "ERROR",
+    "attack_path": {
+      "cve_id": "CVE-2024-6345",
+      "check_id": "python.lang.security.yaml-safe-load.yaml-safe-load",
+      "file": "app/executor.py",
+      "line": 24,
+      "reachable": false,
+      "entry_point": {
+        "kind": "function",
+        "function": "run_command",
+        "file": "app/executor.py",
+        "line": 22,
+        "params": [
+          "cmd"
+        ]
+      },
+      "source": {
+        "description": "parameter 'cmd'",
+        "file": "app/executor.py",
+        "line": 22,
+        "code": "def run_command(cmd: str) -> str:"
+      },
+      "sink_function": "run_command",
+      "sink": {
+        "file": "app/executor.py",
+        "line": 24,
+        "code": "# VULN: shell=True with user input \u2014 command injection",
+        "check_id": "python.lang.security.yaml-safe-load.yaml-safe-load",
+        "cwe": "CWE-502"
+      },
+      "steps": [
+        {
+          "label": "Call run_command(cmd)",
+          "file": "app/executor.py",
+          "line": 22,
+          "code": "def run_command(cmd)"
+        },
+        {
+          "label": "Tainted input: parameter 'cmd'",
+          "file": "app/executor.py",
+          "line": 22,
+          "code": "def run_command(cmd: str) -> str:"
+        },
+        {
+          "label": "Vulnerable sink (python.lang.security.yaml-safe-load.yaml-safe-load)",
+          "file": "app/executor.py",
+          "line": 24,
+          "code": "# VULN: shell=True with user input \u2014 command injection"
+        }
+      ],
+      "impact": "Remote code execution \u2014 attacker runs arbitrary Python on the host",
+      "summary": "Caller \u2192 run_command(cmd)  \u2192  parameter 'cmd'  \u2192  executor.py:24  \u2192  Remote code execution \u2014 attacker runs arbitrary Python on the host",
+      "narrative": [
+        "1. Call run_command(cmd) (app/executor.py:22)",
+        "2. Tainted input: parameter 'cmd' (app/executor.py:22)",
+        "3. Vulnerable sink (python.lang.security.yaml-safe-load.yaml-safe-load) (app/executor.py:24)"
+      ]
+    }
+  },
+  {
+    "cve_id": "CVE-2024-6345",
+    "check_id": "python.lang.security.subprocess-shell-injection.subprocess-shell-injection",
+    "path": "app/executor.py",
+    "line": 31,
+    "vulnerable": true,
+    "confidence": 1.0,
+    "reason": "Using `subprocess.run()` with `shell=True` and user-controlled input can lead to command injection.",
+    "attack_vector": "Attacker sends a crafted string as `cmd` to the `run_command` function, which can include additional commands to be executed.",
+    "cwe": "CWE-78",
+    "severity": "ERROR",
+    "attack_path": {
+      "cve_id": "CVE-2024-6345",
+      "check_id": "python.lang.security.subprocess-shell-injection.subprocess-shell-injection",
+      "file": "app/executor.py",
+      "line": 31,
+      "reachable": false,
+      "entry_point": {
+        "kind": "unknown",
+        "function": "",
+        "file": "app/executor.py"
+      },
+      "source": null,
+      "sink_function": "",
+      "sink": {
+        "file": "app/executor.py",
+        "line": 31,
+        "code": "",
+        "check_id": "python.lang.security.subprocess-shell-injection.subprocess-shell-injection",
+        "cwe": "CWE-78"
+      },
+      "steps": [
+        {
+          "label": "Vulnerable sink (python.lang.security.subprocess-shell-injection.subprocess-shell-injection)",
+          "file": "app/executor.py",
+          "line": 31,
+          "code": ""
+        }
+      ],
+      "impact": "Command injection \u2014 arbitrary OS commands on the host",
+      "summary": "Untrusted input  \u2192  executor.py:31  \u2192  Command injection \u2014 arbitrary OS commands on the host",
+      "narrative": [
+        "1. Vulnerable sink (python.lang.security.subprocess-shell-injection.subprocess-shell-injection) (app/executor.py:31)"
+      ]
+    }
+  },
+  {
+    "cve_id": "CVE-2024-47081",
+    "check_id": "python.requests.security.proxy-auth-leak.proxy-auth-leak",
+    "path": "app/proxy.py",
+    "line": 88,
+    "vulnerable": true,
+    "confidence": 0.9,
+    "reason": "The code constructs the proxy URL with embedded credentials and uses it for all requests, including redirects. If a redirect occurs to a different host, the Proxy-Authorization header will be sent to that host, potentially leaking the credentials.",
+    "attack_vector": "An attacker can craft a response from the target URL that includes a redirect to a malicious server. When the client follows the redirect, the Proxy-Authorization header containing the proxy credentials is sent to the attacker's server.",
+    "cwe": "CWE-287",
+    "severity": "WARNING",
+    "attack_path": {
+      "cve_id": "CVE-2024-47081",
+      "check_id": "python.requests.security.proxy-auth-leak.proxy-auth-leak",
+      "file": "app/proxy.py",
+      "line": 88,
+      "reachable": false,
+      "entry_point": {
+        "kind": "unknown",
+        "function": "",
+        "file": "app/proxy.py"
+      },
+      "source": null,
+      "sink_function": "",
+      "sink": {
+        "file": "app/proxy.py",
+        "line": 88,
+        "code": "",
+        "check_id": "python.requests.security.proxy-auth-leak.proxy-auth-leak",
+        "cwe": "CWE-287"
+      },
+      "steps": [
+        {
+          "label": "Vulnerable sink (python.requests.security.proxy-auth-leak.proxy-auth-leak)",
+          "file": "app/proxy.py",
+          "line": 88,
+          "code": ""
+        }
+      ],
+      "impact": "Open redirect \u2014 phishing and OAuth token theft",
+      "summary": "Untrusted input  \u2192  proxy.py:88  \u2192  Open redirect \u2014 phishing and OAuth token theft",
+      "narrative": [
+        "1. Vulnerable sink (python.requests.security.proxy-auth-leak.proxy-auth-leak) (app/proxy.py:88)"
+      ]
+    }
   }
 ]

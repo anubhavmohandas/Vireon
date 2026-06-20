@@ -161,6 +161,9 @@ def _build_pr_body(
         findings_text += f"- **{f.get('check_id','?')}** in `{f.get('path','?')}` line {f.get('line','?')} (confidence: {avg_conf:.0%})\n"
         findings_text += f"  - {f.get('reason','')[:150]}\n"
 
+    # Real attack paths (entry point → tainted input → sink → impact)
+    attack_text = _build_attack_path_section(exploitable)
+
     # Test results
     tests_passed = test_results.get("passed", 0) if isinstance(test_results, dict) else 0
     tests_failed = test_results.get("failed", 0) if isinstance(test_results, dict) else 0
@@ -201,6 +204,10 @@ def _build_pr_body(
 
 {findings_text or "_No confirmed exploitable findings — patches are dependency upgrades only._"}
 
+### Attack Paths
+
+{attack_text or "_No code-level attack path reconstructed._"}
+
 ### Changes Made
 
 {patches_text or "_No changes generated._"}
@@ -224,6 +231,27 @@ def _build_pr_body(
 > ⚠️ This PR was generated automatically. A human security reviewer should verify the patches before merging.
 > Review the diff carefully and run the full test suite in your CI before merging.
 """
+
+
+def _build_attack_path_section(exploitable: list[dict]) -> str:
+    """Render the real entry→sink attack paths attached to confirmed findings."""
+    blocks = []
+    for f in exploitable[:8]:
+        ap = f.get("attack_path") or {}
+        if not ap:
+            continue
+        summary = ap.get("summary", "")
+        impact = ap.get("impact", "")
+        narrative = ap.get("narrative", [])
+        cve = f.get("cve_id", "") or ap.get("check_id", "")
+        header = f"**{cve}** — {impact}" if impact else f"**{cve}**"
+        block = [header]
+        if summary:
+            block.append(f"> `{summary}`")
+        for n in narrative:
+            block.append(f"  {n}")
+        blocks.append("\n".join(block))
+    return "\n\n".join(blocks)
 
 
 def _get_default_branch(repo_path: str) -> str:
@@ -266,9 +294,12 @@ def _resolve_latest_versions(dep_bumps: list[dict]) -> dict[str, str]:
     """
     For each unique package in dep_bumps that has no concrete version,
     fetch the current latest version from PyPI and return {pkg: version}.
+
+    Delegates to engine.patcher.pypi_latest_version, which uses VERIFIED TLS.
+    (The previous implementation disabled certificate verification — unacceptable
+    in a security tool, even for public metadata.)
     """
-    import urllib.request
-    import json as _json
+    from engine.patcher import pypi_latest_version
 
     packages = {
         (b.get("package") or "").strip().lower()
@@ -276,27 +307,13 @@ def _resolve_latest_versions(dep_bumps: list[dict]) -> dict[str, str]:
         if (b.get("package") or "").strip()
     }
 
-    import ssl as _ssl
-    # macOS Python doesn't ship with linked system certs — use unverified context
-    # for public PyPI metadata (no sensitive data transmitted).
-    _ctx = _ssl._create_unverified_context()
-
     resolved: dict[str, str] = {}
     for pkg in packages:
-        if not pkg:
-            continue
-        try:
-            url = f"https://pypi.org/pypi/{pkg}/json"
-            with urllib.request.urlopen(url, timeout=8, context=_ctx) as resp:
-                data = _json.loads(resp.read())
-            version = data.get("info", {}).get("version", "")
-            if version:
-                resolved[pkg] = version
-                if os.getenv("VIREON_VERBOSE") == "1":
-                    print(f"[github_pr] Resolved {pkg} latest → {version}")
-        except Exception as e:
+        version = pypi_latest_version(pkg)
+        if version:
+            resolved[pkg] = version
             if os.getenv("VIREON_VERBOSE") == "1":
-                print(f"[github_pr] Could not resolve latest version for {pkg}: {e}")
+                print(f"[github_pr] Resolved {pkg} latest → {version}")
 
     return resolved
 
@@ -309,14 +326,16 @@ def _apply_dep_bumps(dep_bumps: list[dict], repo_path: str) -> list[str]:
     if not dep_bumps:
         return []
 
-    # Deduplicate: latest safe version per package
+    # Deduplicate: latest safe version per package (proper semver comparison,
+    # not string comparison — "2.9.0" must lose to "2.10.0").
+    from engine.patcher import _parse_version
+
     pkg_version: dict[str, str] = {}
     for bump in dep_bumps:
         pkg = (bump.get("package") or "").strip().lower()
         to_ver = (bump.get("safe_version") or bump.get("to") or "").strip()
         if pkg and to_ver and to_ver not in ("latest", "?", ""):
-            # Keep highest version seen (simple string comparison is ok for semver)
-            if pkg not in pkg_version or to_ver > pkg_version[pkg]:
+            if pkg not in pkg_version or _parse_version(to_ver) > _parse_version(pkg_version[pkg]):
                 pkg_version[pkg] = to_ver
 
     if not pkg_version:

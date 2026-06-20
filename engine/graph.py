@@ -67,6 +67,47 @@ def build_graph(repo_path: str, stack: dict[str, str], cves: list[dict]):
     return G
 
 
+def cves_from_graph(G) -> list[dict]:
+    """
+    Extract one dict per unique CVE node from the dependency graph.
+
+    Carries the FULL fix metadata (fixed_version, installed_version, severity,
+    cvss_score, attack_vector, description) so downstream dep-bump generation can
+    pin an exact safe version instead of falling back to "latest".
+
+    Returns [] for a missing/empty graph — never raises.
+    """
+    if G is None:
+        return []
+
+    out: list[dict] = []
+    seen: set[str] = set()
+    try:
+        nodes = list(G.nodes(data=True))
+    except Exception:
+        return []
+
+    for node, data in nodes:
+        if not isinstance(data, dict) or data.get("type") != "cve":
+            continue
+        cve_id = data.get("cve_id", node)
+        if not cve_id or cve_id in seen:
+            continue
+        seen.add(cve_id)
+        out.append({
+            "cve_id":            cve_id,
+            "package":           data.get("package", ""),
+            "installed_version": data.get("installed_version", ""),
+            "fixed_version":     data.get("fixed_version", ""),
+            "affected_range":    data.get("affected_range", ""),
+            "severity":          data.get("severity", "UNKNOWN"),
+            "cvss_score":        data.get("cvss_score", 0.0),
+            "attack_vector":     data.get("attack_vector", "UNKNOWN"),
+            "description":       data.get("description", ""),
+        })
+    return out
+
+
 def _scan_python_files(repo_path: str) -> dict[str, list[str]]:
     """Scan Python files and extract import statements."""
     result = {}

@@ -63,8 +63,13 @@ def run_patcher(
             patched_files.add(file_path)
 
     # ── 2. Dependency bumps for CVE-affected packages ───────────────────────
+    # Deterministic — NOT an LLM call. Version resolution is a lookup, not a
+    # reasoning task: OSV already tells us the exact fixed version, and PyPI
+    # gives us the latest when it doesn't. The previous one-shot LLM call
+    # truncated its JSON whenever there were many CVEs, silently degrading every
+    # bump to "latest".
     if all_cves:
-        dep_bumps = _generate_dep_bumps(client, model, all_cves, repo_path)
+        dep_bumps = _generate_dep_bumps(all_cves, repo_path)
 
     if os.getenv("VIREON_VERBOSE") == "1":
         print(f"[patcher] Generated {len(patches)} code patches, {len(dep_bumps)} dep bumps")
@@ -213,88 +218,83 @@ One sentence explaining what you changed.
         return None
 
 
-def _generate_dep_bumps(client, model: str, all_cves: list[dict], repo_path: str) -> list[dict]:
-    """Generate dependency version bumps for CVE-affected packages."""
+def _generate_dep_bumps(all_cves: list[dict], repo_path: str) -> list[dict]:
+    """
+    Generate dependency version bumps for CVE-affected packages — DETERMINISTIC.
+
+    Resolution order per package (highest confidence first):
+      1. OSV ``fixed_version`` — the exact version that patches the CVE.
+      2. Latest version from PyPI (verified TLS) — when OSV gave no fix range.
+      3. The literal string "latest" — only if PyPI is unreachable.
+
+    One row per package (not per CVE): a package with N CVEs collapses to a
+    single bump to the highest safe version, with all CVE IDs recorded. This is
+    why the old LLM call truncated — it was asked to emit one object per CVE.
+    """
     if not all_cves:
         return []
 
-    # Find requirements files
-    req_files = _find_requirements_files(repo_path)
-    if not req_files:
-        return _simple_dep_bumps(all_cves)
+    # Map installed versions from requirements (authoritative for "current").
+    installed = _read_installed_versions(repo_path)
 
-    # Read requirements
-    req_content = ""
-    req_file_used = req_files[0]
-    try:
-        with open(req_file_used) as f:
-            req_content = f.read()
-    except Exception:
-        return _simple_dep_bumps(all_cves)
+    # Collapse CVEs to one entry per package.
+    by_pkg: dict[str, dict] = {}
+    for c in all_cves:
+        pkg = (c.get("package") or "").strip()
+        if not pkg:
+            continue
+        key = pkg.lower().replace("-", "_")
+        entry = by_pkg.setdefault(key, {
+            "package": pkg,
+            "cve_ids": [],
+            "current": "",
+            "fixed_candidates": [],
+            "severity": "UNKNOWN",
+        })
+        cve_id = c.get("cve_id", "")
+        if cve_id and cve_id not in entry["cve_ids"]:
+            entry["cve_ids"].append(cve_id)
+        fv = (c.get("fixed_version") or "").strip()
+        if fv:
+            entry["fixed_candidates"].append(fv)
+        # current version: prefer requirements file, then CVE metadata
+        cur = installed.get(key) or (c.get("installed_version") or "").strip()
+        if cur and not entry["current"]:
+            entry["current"] = cur
+        entry["severity"] = _max_severity(entry["severity"], c.get("severity", "UNKNOWN"))
 
-    cve_summary = "\n".join(
-        f"- {c['cve_id']}: {c['package']} (severity: {c.get('severity','?')}, fixed: {c.get('fixed_version','?') or 'upgrade to latest'})"
-        for c in all_cves[:20]
-    )
+    bumps: list[dict] = []
+    for key, entry in by_pkg.items():
+        # Highest fixed version across this package's CVEs is the safe target.
+        safe_version = _max_version(entry["fixed_candidates"]) if entry["fixed_candidates"] else ""
+        source = "osv_fixed_version"
+        if not safe_version:
+            latest = pypi_latest_version(entry["package"])
+            if latest:
+                safe_version = latest
+                source = "pypi_latest"
+            else:
+                safe_version = "latest"
+                source = "unresolved"
 
-    # Filter requirements to only lines relevant to the CVE packages — avoids
-    # truncating large requirements files and losing unrelated packages.
-    vuln_pkgs = {c["package"].lower().replace("-", "_") for c in all_cves[:20] if c.get("package")}
-    req_lines = req_content.splitlines()
-    relevant_lines = [
-        ln for ln in req_lines
-        if any(pkg in ln.lower().replace("-", "_") for pkg in vuln_pkgs)
-    ]
-    # If nothing matched (unusual normalisation), fall back to first 2000 chars
-    req_excerpt = "\n".join(relevant_lines) if relevant_lines else req_content[:2000]
+        bumps.append({
+            "package":      entry["package"],
+            "cve_id":       entry["cve_ids"][0] if entry["cve_ids"] else "",
+            "cve_ids":      entry["cve_ids"],
+            "current":      entry["current"] or "?",
+            "safe_version": safe_version,
+            "severity":     entry["severity"],
+            "source":       source,
+        })
 
-    prompt = f"""You are a security engineer. Given these CVEs affecting dependencies, generate version bumps.
-
-CURRENT requirements.txt (relevant packages shown):
-```
-{req_excerpt}
-```
-
-CVEs to fix:
-{cve_summary}
-
-For each CVE, provide the safe version to upgrade to. If fixed_version is given, use it.
-If not, say "latest".
-
-Respond with JSON array:
-[
-  {{
-    "package": "<package name>",
-    "cve_id": "<CVE-XXXX-XXXXX>",
-    "current": "<current version from requirements>",
-    "safe_version": "<version that fixes the CVE>",
-    "severity": "<CRITICAL|HIGH|MEDIUM|LOW>"
-  }}
-]"""
-
-    try:
-        response = client.chat.completions.create(
-            model=model,
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        raw = response.choices[0].message.content.strip()
-        if "```json" in raw:
-            raw = raw.split("```json")[1].split("```")[0].strip()
-        elif "```" in raw:
-            raw = raw.split("```")[1].split("```")[0].strip()
-
-        return json.loads(raw)
-
-    except Exception as e:
-        if os.getenv("VIREON_VERBOSE") == "1":
-            if os.getenv("VIREON_VERBOSE") == "1":
-                print(f"[patcher] Dep bump LLM error: {e}")
-        return _simple_dep_bumps(all_cves)
+    if os.getenv("VIREON_VERBOSE") == "1":
+        unresolved = sum(1 for b in bumps if b["source"] == "unresolved")
+        print(f"[patcher] {len(bumps)} dep bumps ({unresolved} unresolved → 'latest')")
+    return bumps
 
 
 def _simple_dep_bumps(all_cves: list[dict]) -> list[dict]:
-    """Fallback: generate dep bumps from CVE data without LLM."""
+    """Pure-data dep bumps (no network) — kept for callers that want offline behaviour."""
     return [
         {
             "package": c.get("package", ""),
@@ -306,6 +306,89 @@ def _simple_dep_bumps(all_cves: list[dict]) -> list[dict]:
         for c in all_cves
         if c.get("package")
     ]
+
+
+def _read_installed_versions(repo_path: str) -> dict[str, str]:
+    """Best-effort {normalized_pkg: version} from the repo's requirements.txt."""
+    out: dict[str, str] = {}
+    req = os.path.join(repo_path or "", "requirements.txt")
+    if not os.path.isfile(req):
+        return out
+    try:
+        with open(req, encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                line = line.split("#")[0].strip()
+                if not line or line.startswith("-"):
+                    continue
+                m = re.match(r"^([A-Za-z0-9_.\-]+)\s*==\s*([^\s;]+)", line)
+                if m:
+                    out[m.group(1).lower().replace("-", "_")] = m.group(2)
+    except Exception:
+        pass
+    return out
+
+
+# Module-level cache so we never hit PyPI twice for the same package in a run.
+_PYPI_CACHE: dict[str, str] = {}
+
+
+def pypi_latest_version(pkg: str) -> str:
+    """
+    Return the latest released version of ``pkg`` from PyPI, or "" on any failure.
+
+    Uses verified TLS (the requests default). A SECURITY tool must not disable
+    certificate verification to fetch its own advisories. Never raises.
+    """
+    name = (pkg or "").strip().lower()
+    if not name:
+        return ""
+    if name in _PYPI_CACHE:
+        return _PYPI_CACHE[name]
+    try:
+        import requests
+        resp = requests.get(f"https://pypi.org/pypi/{name}/json", timeout=8)
+        if resp.status_code != 200:
+            return ""
+        version = (resp.json().get("info", {}) or {}).get("version", "") or ""
+        _PYPI_CACHE[name] = version
+        return version
+    except Exception as e:
+        if os.getenv("VIREON_VERBOSE") == "1":
+            print(f"[patcher] PyPI lookup failed for {name}: {e}")
+        return ""
+
+
+def _parse_version(v: str) -> tuple:
+    """Loose semver tuple for comparison; non-numeric parts sort last."""
+    parts = re.split(r"[.\-+]", (v or "").strip())
+    key = []
+    for p in parts:
+        if p.isdigit():
+            key.append((0, int(p)))
+        elif p:
+            key.append((1, p))
+    return tuple(key)
+
+
+def _max_version(versions: list[str]) -> str:
+    """Return the highest version string from a list (loose semver)."""
+    candidates = [v for v in versions if v]
+    if not candidates:
+        return ""
+    try:
+        return max(candidates, key=_parse_version)
+    except Exception:
+        return candidates[0]
+
+
+_SEV_ORDER = {"UNKNOWN": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
+
+
+def _max_severity(a: str, b: str) -> str:
+    """Return the higher of two severity labels."""
+    a = (a or "UNKNOWN").upper()
+    b = (b or "UNKNOWN").upper()
+    return a if _SEV_ORDER.get(a, 0) >= _SEV_ORDER.get(b, 0) else b
 
 
 def _find_requirements_files(repo_path: str) -> list[str]:

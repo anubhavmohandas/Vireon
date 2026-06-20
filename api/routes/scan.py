@@ -19,11 +19,13 @@ _active_tasks: dict[str, asyncio.Task] = {}
 
 
 def _clone_if_needed(repo_input: str) -> str:
-    """Clone GitHub URL to temp dir, or return local path as-is."""
-    if repo_input.startswith("https://") or repo_input.startswith("git@"):
+    """Clone a remote URL to a temp dir, or return a local path as-is."""
+    url = (repo_input or "").strip()
+    if url.startswith("https://") or url.startswith("http://") or url.startswith("git@"):
         tmp = tempfile.mkdtemp(prefix="vireon-api-")
+        # "--" terminates option parsing so a hostile URL can't be read as a flag.
         subprocess.run(
-            ["git", "clone", "--depth", "1", repo_input, tmp],
+            ["git", "clone", "--depth", "1", "--", url, tmp],
             check=True, capture_output=True, timeout=120,
         )
         return tmp

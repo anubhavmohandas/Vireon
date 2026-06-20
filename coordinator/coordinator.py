@@ -203,9 +203,25 @@ class Coordinator:
             total_n = exploit_result.metadata.get("total_findings", len(state.findings))
             _con.print(f"  [bold magenta]{confirmed_n}[/bold magenta] [dim]of[/dim] [bold magenta]{total_n}[/bold magenta] [dim]findings confirmed exploitable[/dim]")
 
-        if not state.confirmed:
-            _con.print("\n  [yellow]No exploitable findings confirmed — stopping.[/yellow]")
-            await state.add_event("coordinator", "completed", "No exploitable findings confirmed")
+        # GATE: proceed only if at least one finding is ACTUALLY exploitable.
+        # state.confirmed contains every reviewed finding (incl. vulnerable=False),
+        # so it is non-empty even when nothing is exploitable. Gate on the
+        # exploitable subset so we never patch/PR a finding the LLM rejected.
+        exploitable = state.exploitable
+        if not exploitable:
+            reviewed = len(state.confirmed)
+            _con.print(
+                f"\n  [yellow]No exploitable findings confirmed "
+                f"({reviewed} reviewed, 0 exploitable) — stopping before remediation.[/yellow]"
+            )
+            await state.add_event(
+                "coordinator", "completed",
+                detail=f"No exploitable findings confirmed ({reviewed} reviewed, 0 exploitable)",
+            )
+            await state.log_decision(
+                "coordinator", "PIPELINE_STOPPED_NOT_EXPLOITABLE",
+                reason=f"Exploitability review found 0 exploitable findings out of {reviewed} reviewed",
+            )
             await self._print_summary()
             return
 

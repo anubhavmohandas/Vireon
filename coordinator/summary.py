@@ -64,6 +64,24 @@ async def generate_summary(state: SharedState, elapsed_s: float) -> str:
     _con.print(ft)
     _con.print()
 
+    # ── Attack Paths ───────────────────────────────────────────────────────────────
+    attack_paths = getattr(state, "attack_paths", None) or []
+    exploitable_paths = [p for p in attack_paths if isinstance(p, dict)]
+    if exploitable_paths:
+        _con.rule("[bold red] Attack Paths [/bold red]", style="red")
+        _con.print()
+        # Reachable (from a real entry point) first — those are the scary ones.
+        ordered = sorted(exploitable_paths, key=lambda p: not p.get("reachable"))
+        for p in ordered[:6]:
+            cve = p.get("cve_id", "") or p.get("check_id", "")
+            reach = p.get("reachable")
+            tag = "[bold red]REACHABLE[/bold red]" if reach else "[yellow]local[/yellow]"
+            _con.print(f"  {tag}  [bold]{cve}[/bold]  [dim]{p.get('impact','')}[/dim]")
+            summary = p.get("summary", "")
+            if summary:
+                _con.print(f"     [cyan]{summary}[/cyan]")
+            _con.print()
+
     # ── Evidence Pipeline ─────────────────────────────────────────────────────────
     _con.rule("[bold magenta] Evidence Pipeline [/bold magenta]", style="magenta")
     _con.print()
